@@ -496,9 +496,13 @@ class PdfPageTextFragmentWeb implements PdfPageTextFragment {
 
 class PdfPageTextWeb extends PdfPageText {
   PdfPageTextWeb({
+    required this.pageNumber,
     required this.fullText,
     required this.fragments,
   });
+
+  @override
+  final int pageNumber;
 
   @override
   final String fullText;
@@ -551,6 +555,9 @@ class PdfPageTextWeb extends PdfPageText {
       sb.write(str);
     }
 
-    return PdfPageTextWeb(fullText: sb.toString(), fragments: fragments);
+    return PdfPageTextWeb(
+        pageNumber: page.pageNumber,
+        fullText: sb.toString(),
+        fragments: fragments);
   }
 }

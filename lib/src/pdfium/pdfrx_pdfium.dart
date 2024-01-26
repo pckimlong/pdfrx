@@ -811,9 +811,13 @@ class PdfPageTextFragmentPdfium implements PdfPageTextFragment {
 
 class PdfPageTextPdfium extends PdfPageText {
   PdfPageTextPdfium({
+    required this.pageNumber,
     required this.fullText,
     required this.fragments,
   });
+
+  @override
+  final int pageNumber;
 
   @override
   final String fullText;
@@ -823,6 +827,7 @@ class PdfPageTextPdfium extends PdfPageText {
   static Future<PdfPageTextPdfium> _loadText(PdfPagePdfium page) async {
     final result = await _load(page);
     final pageText = PdfPageTextPdfium(
+      pageNumber: page.pageNumber,
       fullText: result.fullText,
       fragments: [],
     );

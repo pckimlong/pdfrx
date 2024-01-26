@@ -26,8 +26,6 @@ import 'pdf_viewer_params.dart';
 /// - [PdfViewer.asset]
 /// - [PdfViewer.file]
 /// - [PdfViewer.uri]
-/// - [PdfViewer.data]
-/// - [PdfViewer.custom]
 /// - [PdfViewer.documentRef]
 ///
 /// Of course, if you have a [PdfDocument] use [PdfViewer] constructor:
@@ -605,20 +603,22 @@ class _PdfViewerState extends State<PdfViewer>
           }
         }
 
-        final overlay = widget.params.pageOverlayBuilder?.call(
+        final overlay = widget.params.pageOverlaysBuilder?.call(
           context,
           rectExternal,
           page,
         );
-        if (overlay != null) {
-          widgets.add(Positioned(
-            key: Key('pageOverlay:${page.pageNumber}'),
-            left: rectExternal.left,
-            top: rectExternal.top,
-            width: rectExternal.width,
-            height: rectExternal.height,
-            child: overlay,
-          ));
+        if (overlay != null && overlay.isNotEmpty) {
+          widgets.add(
+            Positioned(
+              key: Key('pageOverlay:${page.pageNumber}'),
+              left: rectExternal.left,
+              top: rectExternal.top,
+              width: rectExternal.width,
+              height: rectExternal.height,
+              child: Stack(children: overlay),
+            ),
+          );
         }
       }
     }
@@ -721,6 +721,12 @@ class _PdfViewerState extends State<PdfViewer>
             ..color = Colors.black
             ..strokeWidth = 0.2
             ..style = PaintingStyle.stroke);
+
+      if (widget.params.pagePaintCallbacks != null) {
+        for (final callback in widget.params.pagePaintCallbacks!) {
+          callback(canvas, rect, page);
+        }
+      }
 
       if (unusedPageList.isNotEmpty) {
         final currentPageNumber = _pageNumber;
@@ -927,6 +933,28 @@ class _PdfViewerState extends State<PdfViewer>
         anchor: anchor,
       );
 
+  Rect _calcRectForRectInsidePage({
+    required int pageNumber,
+    required PdfRect rect,
+  }) {
+    final page = _document!.pages[pageNumber - 1];
+    final pageRect = _layout!.pageLayouts[pageNumber - 1];
+    final scale = pageRect.width / page.width;
+    final area = rect.toRect(height: page.height, scale: scale);
+    return area.translate(pageRect.left, pageRect.top);
+  }
+
+  Matrix4 _calcMatrixForRectInsidePage({
+    required int pageNumber,
+    required PdfRect rect,
+    PdfPageAnchor? anchor,
+  }) {
+    return _calcMatrixForArea(
+      rect: _calcRectForRectInsidePage(pageNumber: pageNumber, rect: rect),
+      anchor: anchor,
+    );
+  }
+
   Matrix4? _calcMatrixForDest(PdfDest? dest) {
     if (dest == null) return null;
     final page = _document!.pages[dest.pageNumber - 1];
@@ -982,7 +1010,8 @@ class _PdfViewerState extends State<PdfViewer>
               calcY(params[3]),
               calcX(params[2]),
               calcY(params[1]),
-            ),
+            ).translate(pageRect.left, pageRect.top),
+            anchor: PdfPageAnchor.all,
           );
         }
         break;
@@ -1075,6 +1104,21 @@ class _PdfViewerState extends State<PdfViewer>
   }) =>
       _goTo(
         _calcMatrixForPage(pageNumber: pageNumber, anchor: anchor),
+        duration: duration,
+      );
+
+  Future<void> _goToRectInsidePage({
+    required int pageNumber,
+    required PdfRect rect,
+    PdfPageAnchor? anchor,
+    Duration duration = const Duration(milliseconds: 200),
+  }) =>
+      _goTo(
+        _calcMatrixForRectInsidePage(
+          pageNumber: pageNumber,
+          rect: rect,
+          anchor: anchor,
+        ),
         duration: duration,
       );
 
@@ -1278,6 +1322,39 @@ class PdfViewerController extends ValueListenable<Matrix4> {
       _state._goToPage(
           pageNumber: pageNumber, anchor: anchor, duration: duration);
 
+  Future<void> goToRectInsidePage({
+    required int pageNumber,
+    required PdfRect rect,
+    PdfPageAnchor? anchor,
+    Duration duration = const Duration(milliseconds: 200),
+  }) =>
+      _state._goToRectInsidePage(
+        pageNumber: pageNumber,
+        rect: rect,
+        anchor: anchor,
+        duration: duration,
+      );
+
+  Rect calcRectForRectInsidePage({
+    required int pageNumber,
+    required PdfRect rect,
+  }) =>
+      _state._calcRectForRectInsidePage(
+        pageNumber: pageNumber,
+        rect: rect,
+      );
+
+  Matrix4 calcMatrixForRectInsidePage({
+    required int pageNumber,
+    required PdfRect rect,
+    PdfPageAnchor? anchor,
+  }) =>
+      _state._calcMatrixForRectInsidePage(
+        pageNumber: pageNumber,
+        rect: rect,
+        anchor: anchor,
+      );
+
   /// Go to the specified destination.
   Future<bool> goToDest(
     PdfDest? dest, {
@@ -1329,6 +1406,10 @@ class PdfViewerController extends ValueListenable<Matrix4> {
   }) =>
       _state._goTo(destination, duration: duration);
 
+  /// Ensure the specified area is visible inside the view port.
+  ///
+  /// If the area is larger than the view port, the area is zoomed to fit the view port.
+  /// [margin] adds extra margin to the area.
   Future<void> ensureVisible(
     Rect rect, {
     Duration duration = const Duration(milliseconds: 200),
@@ -1385,6 +1466,8 @@ class PdfViewerController extends ValueListenable<Matrix4> {
       _state._onWheelDelta(event.scrollDelta);
     }
   }
+
+  void invalidate() => _state._invalidate();
 }
 
 extension PdfMatrix4Ext on Matrix4 {
