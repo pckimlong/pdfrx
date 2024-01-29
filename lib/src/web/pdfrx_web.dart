@@ -487,6 +487,8 @@ class PdfPageTextFragmentWeb implements PdfPageTextFragment {
   @override
   int get length => text.length;
   @override
+  int get end => index + length;
+  @override
   final PdfRect bounds;
   @override
   List<PdfRect>? get charRects => null;

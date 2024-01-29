@@ -1,8 +1,11 @@
-import 'dart:async';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:pdfrx_example/search_view.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'outline_view.dart';
+import 'password_dialog.dart';
+import 'thumbnails_view.dart';
 
 void main() {
   runApp(const MyApp());
@@ -28,9 +31,6 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  final searchTextFocusNode = FocusNode();
-  late final searchTextController = TextEditingController()
-    ..addListener(_searchTextUpdated);
   final controller = PdfViewerController();
   final showLeftPane = ValueNotifier<bool>(false);
   final outline = ValueNotifier<List<PdfOutlineNode>?>(null);
@@ -47,8 +47,6 @@ class _MainPageState extends State<MainPage> {
     textSearcher.dispose();
     showLeftPane.dispose();
     outline.dispose();
-    searchTextController.dispose();
-    searchTextFocusNode.dispose();
     super.dispose();
   }
 
@@ -78,8 +76,7 @@ class _MainPageState extends State<MainPage> {
           ),
           IconButton(
             icon: const Icon(Icons.last_page),
-            onPressed: () =>
-                controller.goToPage(pageNumber: controller.pages.length),
+            onPressed: () => controller.goToPage(pageNumber: controller.pages.length),
           ),
         ],
       ),
@@ -107,10 +104,10 @@ class _MainPageState extends State<MainPage> {
                       Expanded(
                         child: TabBarView(
                           children: [
-                            _searchPane(),
+                            TextSearchView(textSearcher: textSearcher),
                             ValueListenableBuilder(
                               valueListenable: outline,
-                              builder: (context, outline, child) => PdfOutline(
+                              builder: (context, outline, child) => OutlineView(
                                 outline: outline,
                                 controller: controller,
                               ),
@@ -128,19 +125,19 @@ class _MainPageState extends State<MainPage> {
           Expanded(
             child: Stack(
               children: [
-                // PdfViewer.asset(
-                //   'assets/hello.pdf',
-                // PdfViewer.file(
-                //   r"D:\pdfrx\example\assets\hello.pdf",
-                // PdfViewer.uri(
-                //   Uri.parse(
-                //       'https://espresso3389.github.io/pdfrx/assets/assets/hello.pdf'),
-                PdfViewer.uri(
-                  Uri.parse(kIsWeb
-                      ? 'assets/assets/hello.pdf'
-                      : 'https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf'),
+                PdfViewer.asset(
+                  'assets/hello.pdf',
+                  // PdfViewer.file(
+                  //   r"D:\pdfrx\example\assets\hello.pdf",
+                  // PdfViewer.uri(
+                  //   Uri.parse(
+                  //       'https://espresso3389.github.io/pdfrx/assets/assets/PDF32000_2008.pdf'),
+                  // PdfViewer.uri(
+                  //   Uri.parse(kIsWeb
+                  //       ? 'assets/assets/hello.pdf'
+                  //       : 'https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf'),
                   // Set password provider to show password dialog
-                  passwordProvider: () => _passwordDialog(context),
+                  passwordProvider: () => passwordDialog(context),
                   controller: controller,
                   params: PdfViewerParams(
                     enableTextSelection: true,
@@ -179,9 +176,7 @@ class _MainPageState extends State<MainPage> {
                         controller: controller,
                         orientation: ScrollbarOrientation.right,
                         thumbSize: const Size(40, 25),
-                        thumbBuilder:
-                            (context, thumbSize, pageNumber, controller) =>
-                                Container(
+                        thumbBuilder: (context, thumbSize, pageNumber, controller) => Container(
                           color: Colors.black,
                           child: Center(
                             child: Text(
@@ -196,9 +191,7 @@ class _MainPageState extends State<MainPage> {
                         controller: controller,
                         orientation: ScrollbarOrientation.bottom,
                         thumbSize: const Size(80, 30),
-                        thumbBuilder:
-                            (context, thumbSize, pageNumber, controller) =>
-                                Container(
+                        thumbBuilder: (context, thumbSize, pageNumber, controller) => Container(
                           color: Colors.red,
                         ),
                       ),
@@ -206,12 +199,9 @@ class _MainPageState extends State<MainPage> {
                     //
                     // Loading progress indicator example
                     //
-                    loadingBannerBuilder:
-                        (context, bytesDownloaded, totalBytes) => Center(
+                    loadingBannerBuilder: (context, bytesDownloaded, totalBytes) => Center(
                       child: CircularProgressIndicator(
-                        value: totalBytes != null
-                            ? bytesDownloaded / totalBytes
-                            : null,
+                        value: totalBytes != null ? bytesDownloaded / totalBytes : null,
                         backgroundColor: Colors.grey,
                       ),
                     ),
@@ -225,7 +215,7 @@ class _MainPageState extends State<MainPage> {
                       child: InkWell(
                         onTap: () {
                           if (link.url != null) {
-                            print('Opening ${link.url}');
+                            launchUrl(link.url!);
                           } else if (link.dest != null) {
                             controller.goToDest(link.dest);
                           }
@@ -233,10 +223,10 @@ class _MainPageState extends State<MainPage> {
                         hoverColor: Colors.blue.withOpacity(0.2),
                       ),
                     ),
-                    pagePaintCallbacks: [
-                      textSearcher.pageTextMatchPaintCallback
-                    ],
-                    onDocumentChanged: _updateOutline,
+                    pagePaintCallbacks: [textSearcher.pageTextMatchPaintCallback],
+                    onDocumentChanged: (document) async {
+                      outline.value = await document?.loadOutline();
+                    },
                   ),
                 ),
               ],
@@ -244,235 +234,6 @@ class _MainPageState extends State<MainPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Future<void> _updateOutline(PdfDocument? document) async {
-    outline.value = await document?.loadOutline();
-  }
-
-  Widget _searchPane() {
-    return Column(
-      children: [
-        textSearcher.isSearching
-            ? LinearProgressIndicator(
-                value: textSearcher.searchProgress,
-                minHeight: 4,
-              )
-            : const SizedBox(height: 4),
-        Row(
-          children: [
-            const SizedBox(width: 8),
-            Expanded(
-              child: Stack(
-                alignment: Alignment.centerLeft,
-                children: [
-                  TextField(
-                    controller: searchTextController,
-                    focusNode: searchTextFocusNode,
-                    decoration: const InputDecoration(
-                      contentPadding: EdgeInsets.only(right: 50),
-                    ),
-                  ),
-                  if (textSearcher.hasMatches)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        '${textSearcher.currentIndex! + 1} / ${textSearcher.matches.length}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              onPressed: () => textSearcher.goToNextMatch(),
-              icon: const Icon(Icons.arrow_downward),
-              iconSize: 20,
-            ),
-            IconButton(
-              onPressed: () => textSearcher.goToPrevMatch(),
-              icon: const Icon(Icons.arrow_upward),
-              iconSize: 20,
-            ),
-            IconButton(
-              onPressed: () => _searchReset(),
-              icon: const Icon(Icons.close),
-              iconSize: 20,
-            ),
-          ],
-        ),
-        if (textSearcher.hasMatches)
-          Expanded(
-            child: ListView.separated(
-              itemCount: textSearcher.matches.length,
-              itemBuilder: (context, index) =>
-                  _textMatchWidget(textSearcher.matches[index]),
-              separatorBuilder: (context, index) => const Divider(),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Future<void> _searchReset() async {
-    searchTextController.text = '';
-    textSearcher.resetTextSearch();
-    searchTextFocusNode.requestFocus();
-  }
-
-  void _searchTextUpdated() {
-    textSearcher.startTextSearch(searchTextController.text);
-  }
-
-  Widget _textMatchWidget(PdfTextMatch match) {
-    return ListTile(
-      title: Text(
-        match.fragments.map((e) => e.text).join().replaceAll('\n', ''),
-      ),
-      subtitle: Text(
-        'Page ${match.pageNumber}',
-        style: const TextStyle(fontSize: 12),
-      ),
-      onTap: () => textSearcher.goToMatch(match),
-    );
-  }
-}
-
-//
-// Just a rough implementation of the document index
-//
-class PdfOutline extends StatelessWidget {
-  const PdfOutline({
-    super.key,
-    required this.outline,
-    required this.controller,
-  });
-
-  final List<PdfOutlineNode>? outline;
-  final PdfViewerController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final list = _getOutlineList(outline, 0).toList();
-    return SizedBox(
-      width: list.isEmpty ? 0 : 200,
-      child: ListView.builder(
-        itemCount: list.length,
-        itemBuilder: (context, index) {
-          final item = list[index];
-          return InkWell(
-            onTap: () => controller.goToDest(item.node.dest),
-            child: Container(
-              margin: EdgeInsets.only(
-                left: item.level * 16.0 + 8,
-                top: 8,
-                bottom: 8,
-              ),
-              child: Text(
-                item.node.title,
-                softWrap: false,
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Iterable<({PdfOutlineNode node, int level})> _getOutlineList(
-      List<PdfOutlineNode>? outline, int level) sync* {
-    if (outline == null) return;
-    for (var node in outline) {
-      yield (node: node, level: level);
-      yield* _getOutlineList(node.children, level + 1);
-    }
-  }
-}
-
-//
-// Simple password dialog
-//
-Future<String?> _passwordDialog(BuildContext context) async {
-  final textController = TextEditingController();
-  return await showDialog<String?>(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      return AlertDialog(
-        title: const Text('Enter password'),
-        content: TextField(
-          controller: textController,
-          autofocus: true,
-          keyboardType: TextInputType.visiblePassword,
-          obscureText: true,
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(null),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(textController.text),
-            child: const Text('OK'),
-          ),
-        ],
-      );
-    },
-  );
-}
-
-//
-// Super simple thumbnails view
-//
-class ThumbnailsView extends StatelessWidget {
-  const ThumbnailsView({super.key, this.controller});
-
-  final PdfViewerController? controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.grey,
-      child: controller?.documentRef == null
-          ? null
-          : PdfDocumentViewBuilder(
-              documentRef: controller!.documentRef,
-              builder: (context, document) => ListView.builder(
-                itemCount: document?.pages.length ?? 0,
-                itemBuilder: (context, index) {
-                  return Container(
-                    margin: const EdgeInsets.all(8),
-                    height: 240,
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          height: 220,
-                          child: InkWell(
-                            onTap: () => controller!.goToPage(
-                              pageNumber: index + 1,
-                            ),
-                            child: PdfPageView(
-                              document: document,
-                              pageNumber: index + 1,
-                              alignment: Alignment.center,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${index + 1}',
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
     );
   }
 }

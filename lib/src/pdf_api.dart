@@ -37,8 +37,7 @@ abstract class PdfDocumentFactory {
 
   /// See [PdfDocument.openCustom].
   Future<PdfDocument> openCustom({
-    required FutureOr<int> Function(Uint8List buffer, int position, int size)
-        read,
+    required FutureOr<int> Function(Uint8List buffer, int position, int size) read,
     required int fileSize,
     required String sourceName,
     PdfPasswordProvider? passwordProvider,
@@ -170,8 +169,7 @@ abstract class PdfDocument {
   /// [firstAttemptByEmptyPassword] is used to determine whether the first attempt to open the PDF is by empty password
   /// or not. For more info, see [PdfPasswordProvider].
   static Future<PdfDocument> openCustom({
-    required FutureOr<int> Function(Uint8List buffer, int position, int size)
-        read,
+    required FutureOr<int> Function(Uint8List buffer, int position, int size) read,
     required int fileSize,
     required String sourceName,
     PdfPasswordProvider? passwordProvider,
@@ -347,8 +345,7 @@ abstract class PdfImage {
   /// Create [ui.Image] from the rendered image.
   Future<ui.Image> createImage() {
     final comp = Completer<ui.Image>();
-    ui.decodeImageFromPixels(
-        pixels, width, height, format, (image) => comp.complete(image));
+    ui.decodeImageFromPixels(pixels, width, height, format, (image) => comp.complete(image));
     return comp.future;
   }
 }
@@ -373,8 +370,8 @@ abstract class PdfPageText {
   ///
   /// If the specified text index is out of range, it returns -1.
   int getFragmentIndexForTextIndex(int textIndex) {
-    final index = fragments.lowerBound(
-        _PdfPageTextFragmentForSearch(textIndex), (a, b) => a.index - b.index);
+    final index =
+        fragments.lowerBound(_PdfPageTextFragmentForSearch(textIndex), (a, b) => a.index - b.index);
     if (index > fragments.length) {
       return -1; // range error
     }
@@ -429,6 +426,9 @@ abstract class PdfPageTextFragment {
 
   /// Length of the text fragment.
   int get length;
+
+  /// End index of the text fragment on [PdfPageText.fullText].
+  int get end => index + length;
 
   /// Bounds of the text fragment in PDF page coordinates.
   PdfRect get bounds;
@@ -531,22 +531,20 @@ class PdfTextMatch {
       }
     }
 
-    var bounds = sf.charRects != null
-        ? sf.charRects!.skip(start - sf.index).boundingRect()
-        : sf.bounds;
+    var bounds =
+        sf.charRects != null ? sf.charRects!.skip(start - sf.index).boundingRect() : sf.bounds;
     for (int i = s + 1; i < l; i++) {
       bounds = bounds.merge(pageText.fragments[i].bounds);
     }
     final lf = pageText.fragments[l];
-    bounds = bounds.merge(lf.charRects != null
-        ? lf.charRects!.take(end - lf.index).boundingRect()
-        : lf.bounds);
+    bounds = bounds.merge(
+        lf.charRects != null ? lf.charRects!.take(end - lf.index).boundingRect() : lf.bounds);
 
     return PdfTextMatch(
       pageText.pageNumber,
       pageText.fragments.sublist(s, l + 1),
-      s - sf.index,
-      l - lf.index,
+      start - sf.index,
+      end - lf.index,
       bounds,
     );
   }
@@ -622,8 +620,7 @@ class PdfRect {
   }
 
   @override
-  int get hashCode =>
-      left.hashCode ^ top.hashCode ^ right.hashCode ^ bottom.hashCode;
+  int get hashCode => left.hashCode ^ top.hashCode ^ right.hashCode ^ bottom.hashCode;
 
   @override
   String toString() {
@@ -652,8 +649,7 @@ class PdfDest {
   final List<double?>? params;
 
   @override
-  String toString() =>
-      'PdfDest{pageNumber: $pageNumber, command: $command, params: $params}';
+  String toString() => 'PdfDest{pageNumber: $pageNumber, command: $command, params: $params}';
 }
 
 /// [PDF 32000-1:2008, 12.3.2.2 Explicit Destinations, Table 151](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf#page=374)

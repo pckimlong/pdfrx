@@ -16,8 +16,7 @@ class PdfTextSearcher extends Listenable {
   final PdfViewerController _controller;
 
   /// The [PdfViewerController] to use.
-  PdfViewerController? get controller =>
-      _controller.isReady ? _controller : null;
+  PdfViewerController? get controller => _controller.isReady ? _controller : null;
 
   Timer? _searchTextTimer; // timer to start search
   int _searchSession = 0; // current search session
@@ -133,8 +132,7 @@ class PdfTextSearcher extends Listenable {
             textMatches.add(f);
           }
           _matches = List.unmodifiable(textMatches);
-          _matchesPageStartIndices =
-              List.unmodifiable(textMatchesPageStartIndex);
+          _matchesPageStartIndices = List.unmodifiable(textMatchesPageStartIndex);
           _isSearching = page.pageNumber < document.pages.length;
           notifyListeners();
 
@@ -145,6 +143,15 @@ class PdfTextSearcher extends Listenable {
             goToMatchOfIndex(_currentIndex!);
           }
         }
+      },
+    );
+  }
+
+  /// Just a helper function to load the text of a page.
+  Future<PdfPageText?> loadText({required int pageNumber}) async {
+    return await controller!.documentRef.resolveListenable().useDocument(
+      (document) async {
+        return await document.pages[pageNumber - 1].loadText();
       },
     );
   }
@@ -200,23 +207,20 @@ class PdfTextSearcher extends Listenable {
   /// Paint callback to highlight the matches.
   ///
   /// Use this with [PdfViewerParams.pagePaintCallback] to highlight the matches.
-  void pageTextMatchPaintCallback(
-      ui.Canvas canvas, Rect pageRect, PdfPage page) {
+  void pageTextMatchPaintCallback(ui.Canvas canvas, Rect pageRect, PdfPage page) {
     final textMatches = getMatchesRangeForPage(page.pageNumber);
     if (textMatches == null) return;
 
     final scale = pageRect.width / page.width;
     for (int i = textMatches.start; i < textMatches.end; i++) {
       final m = _matches[i];
-      final rect = m.bounds
-          .toRect(height: page.height, scale: scale)
-          .translate(pageRect.left, pageRect.top);
+      final rect =
+          m.bounds.toRect(height: page.height, scale: scale).translate(pageRect.left, pageRect.top);
       canvas.drawRect(
         rect,
         Paint()
-          ..color = m == _currentMatch
-              ? Colors.orange.withOpacity(0.5)
-              : Colors.yellow.withOpacity(0.5),
+          ..color =
+              m == _currentMatch ? Colors.orange.withOpacity(0.5) : Colors.yellow.withOpacity(0.5),
       );
     }
   }

@@ -802,6 +802,8 @@ class PdfPageTextFragmentPdfium implements PdfPageTextFragment {
   @override
   final int length;
   @override
+  int get end => index + length;
+  @override
   final PdfRect bounds;
   @override
   final List<PdfRect>? charRects;
