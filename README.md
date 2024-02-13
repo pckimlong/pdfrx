@@ -16,7 +16,12 @@ A [demo site](https://espresso3389.github.io/pdfrx/) using Flutter Web
 - [Document Outline (a.k.a Bookmarks)](#document-outline-aka-bookmarks) support
 - [Text Selection (still experimental)](#text-selection) support
 - [Text Search](#text-search) support
-- Flexibily customizable
+- Viewer decoration support
+  - Scroll bar by [PdfScrollThumb](#showing-scroll-thumbs)
+  - More viewer customizations by [PdfViewerParams.viewerOverlayBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerParams/viewerOverlayBuilder.html)
+- Page decoration support
+  - Overlay widgets on page by [PdfViewerParams.pageOverlaysBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerParams/pageOverlaysBuilder.html)
+  - Canvas based paint on page by [PdfViewerParams.pagePaintCallbacks](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerParams/pagePaintCallbacks.html)
 - Multi-platform support
 
   - Android
