@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
-import 'package:pdfrx_example/search_view.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'markers_view.dart';
 import 'outline_view.dart';
 import 'password_dialog.dart';
+import 'search_view.dart';
 import 'thumbnails_view.dart';
 
 void main() {
@@ -31,10 +32,13 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
+  final documentRef = ValueNotifier<PdfDocumentRef?>(null);
   final controller = PdfViewerController();
   final showLeftPane = ValueNotifier<bool>(false);
   final outline = ValueNotifier<List<PdfOutlineNode>?>(null);
   late final textSearcher = PdfTextSearcher(controller)..addListener(_update);
+  final _markers = <int, List<Marker>>{};
+  PdfTextRanges? _selectedText;
 
   void _update() {
     if (mounted) {
@@ -44,9 +48,11 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
+    textSearcher.removeListener(_update);
     textSearcher.dispose();
     showLeftPane.dispose();
     outline.dispose();
+    documentRef.dispose();
     super.dispose();
   }
 
@@ -62,6 +68,27 @@ class _MainPageState extends State<MainPage> {
         ),
         title: const Text('Pdfrx example'),
         actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.circle,
+              color: Colors.red,
+            ),
+            onPressed: () => _addCurrentSelectionToMarkers(Colors.red),
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.circle,
+              color: Colors.green,
+            ),
+            onPressed: () => _addCurrentSelectionToMarkers(Colors.green),
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.circle,
+              color: Colors.orangeAccent,
+            ),
+            onPressed: () => _addCurrentSelectionToMarkers(Colors.orangeAccent),
+          ),
           IconButton(
             icon: const Icon(Icons.zoom_in),
             onPressed: () => controller.zoomUp(),
@@ -93,18 +120,26 @@ class _MainPageState extends State<MainPage> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(1, 0, 4, 0),
                 child: DefaultTabController(
-                  length: 3,
+                  length: 4,
                   child: Column(
                     children: [
                       const TabBar(tabs: [
-                        Tab(text: 'Search'),
-                        Tab(text: 'Outline'),
-                        Tab(text: 'Thumbnails'),
+                        Tab(icon: Icon(Icons.search), text: 'Search'),
+                        Tab(icon: Icon(Icons.menu_book), text: 'TOC'),
+                        Tab(icon: Icon(Icons.image), text: 'Pages'),
+                        Tab(icon: Icon(Icons.bookmark), text: 'Markers'),
                       ]),
                       Expanded(
                         child: TabBarView(
                           children: [
-                            TextSearchView(textSearcher: textSearcher),
+                            // NOTE: documentRef is not explicitly used but it indicates that
+                            // the document is changed.
+                            ValueListenableBuilder(
+                              valueListenable: documentRef,
+                              builder: (context, documentRef, child) => TextSearchView(
+                                textSearcher: textSearcher,
+                              ),
+                            ),
                             ValueListenableBuilder(
                               valueListenable: outline,
                               builder: (context, outline, child) => OutlineView(
@@ -112,7 +147,27 @@ class _MainPageState extends State<MainPage> {
                                 controller: controller,
                               ),
                             ),
-                            ThumbnailsView(controller: controller),
+                            ValueListenableBuilder(
+                              valueListenable: documentRef,
+                              builder: (context, documentRef, child) => ThumbnailsView(
+                                documentRef: documentRef,
+                                controller: controller,
+                              ),
+                            ),
+                            MarkersView(
+                              markers: _markers.values.expand((e) => e).toList(),
+                              onTap: (marker) {
+                                final rect = controller.calcRectForRectInsidePage(
+                                  pageNumber: marker.ranges.pageText.pageNumber,
+                                  rect: marker.ranges.bounds,
+                                );
+                                controller.ensureVisible(rect);
+                              },
+                              onDeleteTap: (marker) {
+                                _markers[marker.ranges.pageNumber]!.remove(marker);
+                                setState(() {});
+                              },
+                            ),
                           ],
                         ),
                       ),
@@ -211,11 +266,11 @@ class _MainPageState extends State<MainPage> {
                     // FIXME: a link with several areas (link that contains line-break) does not correctly
                     // show the hover status
                     linkWidgetBuilder: (context, link, size) => Material(
-                      color: Colors.transparent,
+                      color: Colors.blue.withOpacity(0.2),
                       child: InkWell(
-                        onTap: () {
+                        onTap: () async {
                           if (link.url != null) {
-                            launchUrl(link.url!);
+                            navigateToUrl(link.url!);
                           } else if (link.dest != null) {
                             controller.goToDest(link.dest);
                           }
@@ -223,9 +278,24 @@ class _MainPageState extends State<MainPage> {
                         hoverColor: Colors.blue.withOpacity(0.2),
                       ),
                     ),
-                    pagePaintCallbacks: [textSearcher.pageTextMatchPaintCallback],
+                    pagePaintCallbacks: [
+                      textSearcher.pageTextMatchPaintCallback,
+                      _paintMarkers,
+                    ],
                     onDocumentChanged: (document) async {
-                      outline.value = await document?.loadOutline();
+                      if (document == null) {
+                        documentRef.value = null;
+                        outline.value = null;
+                        _selectedText = null;
+                        _markers.clear();
+                      }
+                    },
+                    onViewerReady: (document, controller) async {
+                      documentRef.value = controller.documentRef;
+                      outline.value = await document.loadOutline();
+                    },
+                    onTextSelectionChange: (selection) {
+                      _selectedText = selection;
                     },
                   ),
                 ),
@@ -235,5 +305,83 @@ class _MainPageState extends State<MainPage> {
         ],
       ),
     );
+  }
+
+  void _paintMarkers(Canvas canvas, Rect pageRect, PdfPage page) {
+    final markers = _markers[page.pageNumber];
+    if (markers == null) {
+      return;
+    }
+    for (final marker in markers) {
+      final paint = Paint()
+        ..color = marker.color.withAlpha(100)
+        ..style = PaintingStyle.fill;
+
+      for (final range in marker.ranges.ranges) {
+        final f = PdfTextRangeWithFragments.fromTextRange(
+          marker.ranges.pageText,
+          range.start,
+          range.end,
+        );
+        if (f != null) {
+          canvas.drawRect(
+            f.bounds.toRectInPageRect(page: page, pageRect: pageRect),
+            paint,
+          );
+        }
+      }
+    }
+  }
+
+  void _addCurrentSelectionToMarkers(Color color) {
+    if (controller.isReady &&
+        controller.pageNumber != null &&
+        _selectedText != null &&
+        _selectedText!.isNotEmpty) {
+      _markers.putIfAbsent(controller.pageNumber!, () => []).add(Marker(color, _selectedText!));
+      setState(() {});
+    }
+  }
+
+  Future<void> navigateToUrl(Uri url) async {
+    if (await shouldOpenUrl(context, url)) {
+      await launchUrl(url);
+    }
+  }
+
+  Future<bool> shouldOpenUrl(BuildContext context, Uri url) async {
+    final result = await showDialog<bool?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Navigate to URL?'),
+          content: SelectionArea(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(text: 'Do you want to navigate to the following location?\n'),
+                  TextSpan(
+                    text: url.toString(),
+                    style: const TextStyle(color: Colors.blue),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Go'),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
   }
 }

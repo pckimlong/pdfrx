@@ -23,26 +23,26 @@ import 'pdf_viewer_params.dart';
 /// A widget to display PDF document.
 ///
 /// To create a [PdfViewer] widget, use one of the following constructors:
-/// - [PdfViewer.asset]
-/// - [PdfViewer.file]
-/// - [PdfViewer.uri]
-/// - [PdfViewer.documentRef]
+/// - [PdfDocument] with [PdfViewer.documentRef]
+/// - [PdfViewer.asset] with an asset name
+/// - [PdfViewer.file] with a file path
+/// - [PdfViewer.uri] with a URI
 ///
-/// Of course, if you have a [PdfDocument] use [PdfViewer] constructor:
-/// - [PdfViewer]
+/// Or otherwise, you can pass [PdfDocumentRef] to [PdfViewer] constructor.
 class PdfViewer extends StatefulWidget {
-  /// Create [PdfViewer] using [PdfDocument].
+  /// Create [PdfViewer] from a [PdfDocumentRef].
   ///
+  /// [documentRef] is the [PdfDocumentRef].
   /// [controller] is the controller to control the viewer.
   /// [params] is the parameters to customize the viewer.
   /// [initialPageNumber] is the page number to show initially.
-  PdfViewer({
-    required PdfDocument document,
+  const PdfViewer(
+    this.documentRef, {
     super.key,
     this.controller,
     this.params = const PdfViewerParams(),
     this.initialPageNumber = 1,
-  }) : documentRef = PdfDocumentRefDirect(document);
+  });
 
   /// Create [PdfViewer] from an asset.
   ///
@@ -99,6 +99,7 @@ class PdfViewer extends StatefulWidget {
   /// [controller] is the controller to control the viewer.
   /// [params] is the parameters to customize the viewer.
   /// [initialPageNumber] is the page number to show initially.
+  /// [preferRangeAccess] to prefer range access to download the PDF. The default is false.
   PdfViewer.uri(
     Uri uri, {
     PdfPasswordProvider? passwordProvider,
@@ -107,26 +108,72 @@ class PdfViewer extends StatefulWidget {
     this.controller,
     this.params = const PdfViewerParams(),
     this.initialPageNumber = 1,
+    bool preferRangeAccess = false,
   }) : documentRef = PdfDocumentRefUri(
           uri,
           passwordProvider: passwordProvider,
           firstAttemptByEmptyPassword: firstAttemptByEmptyPassword,
+          preferRangeAccess: preferRangeAccess,
         );
 
-  /// Create [PdfViewer] from a [PdfDocumentRef].
+  /// Create [PdfViewer] from a byte data.
   ///
-  /// [documentRef] is the [PdfDocumentRef].
+  /// [data] is the byte data.
+  /// [sourceName] can be any arbitrary string to identify the source of the PDF; [data] does not identify the source
+  /// if such name is explicitly specified.
+  /// [passwordProvider] is used to provide password for encrypted PDF. See [PdfPasswordProvider] for more info.
+  /// [firstAttemptByEmptyPassword] is used to determine whether the first attempt to open the PDF is by empty password
+  /// or not. For more info, see [PdfPasswordProvider].
   /// [controller] is the controller to control the viewer.
   /// [params] is the parameters to customize the viewer.
   /// [initialPageNumber] is the page number to show initially.
-  const PdfViewer.documentRef({
-    required this.documentRef,
+  PdfViewer.data(
+    Uint8List data, {
+    required String sourceName,
+    PdfPasswordProvider? passwordProvider,
+    bool firstAttemptByEmptyPassword = true,
     super.key,
     this.controller,
     this.params = const PdfViewerParams(),
     this.initialPageNumber = 1,
-  });
+  }) : documentRef = PdfDocumentRefData(
+          data,
+          sourceName: sourceName,
+          passwordProvider: passwordProvider,
+          firstAttemptByEmptyPassword: firstAttemptByEmptyPassword,
+        );
 
+  /// Create [PdfViewer] from a custom source.
+  ///
+  /// [fileSize] is the size of the PDF file.
+  /// [read] is the function to read the PDF file.
+  /// [sourceName] can be any arbitrary string to identify the source of the PDF; Neither of [read]/[fileSize]
+  /// identify the source if such name is explicitly specified.
+  /// [passwordProvider] is used to provide password for encrypted PDF. See [PdfPasswordProvider] for more info.
+  /// [firstAttemptByEmptyPassword] is used to determine whether the first attempt to open the PDF is by empty password
+  /// or not. For more info, see [PdfPasswordProvider].
+  /// [controller] is the controller to control the viewer.
+  /// [params] is the parameters to customize the viewer.
+  /// [initialPageNumber] is the page number to show initially.
+  PdfViewer.custom({
+    required int fileSize,
+    required FutureOr<int> Function(Uint8List buffer, int position, int size) read,
+    required String sourceName,
+    PdfPasswordProvider? passwordProvider,
+    bool firstAttemptByEmptyPassword = true,
+    super.key,
+    this.controller,
+    this.params = const PdfViewerParams(),
+    this.initialPageNumber = 1,
+  }) : documentRef = PdfDocumentRefCustom(
+          fileSize: fileSize,
+          read: read,
+          sourceName: sourceName,
+          passwordProvider: passwordProvider,
+          firstAttemptByEmptyPassword: firstAttemptByEmptyPassword,
+        );
+
+  /// [PdfDocumentRef] that represents the PDF document.
   final PdfDocumentRef documentRef;
 
   /// Controller to control the viewer.
@@ -302,9 +349,16 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
 
       if (!_initialized && _layout != null) {
         _initialized = true;
-        Future.microtask(() {
+        Future.microtask(() async {
           if (mounted) {
-            _goToPage(pageNumber: widget.initialPageNumber, duration: Duration.zero);
+            final initialPageNumber =
+                widget.params.calculateInitialPageNumber?.call(_document!, _controller!) ??
+                    widget.initialPageNumber;
+            await _goToPage(pageNumber: initialPageNumber, duration: Duration.zero);
+
+            if (mounted && _document != null && _controller != null) {
+              widget.params.onViewerReady?.call(_document!, _controller!);
+            }
           }
         });
       }
@@ -324,6 +378,8 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
                     iv.InteractiveViewer(
                       transformationController: _txController,
                       constrained: false,
+                      boundaryMargin:
+                          widget.params.boundaryMargin ?? const EdgeInsets.all(double.infinity),
                       maxScale: widget.params.maxScale,
                       minScale: _alternativeFitScale != null ? _alternativeFitScale! / 2 : 0.1,
                       panAxis: widget.params.panAxis,
@@ -566,6 +622,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
                     registrar: registrar,
                     page: page,
                     pageRect: rectExternal,
+                    onTextSelectionChange: widget.params.onTextSelectionChange,
                   );
                 }),
               ),
@@ -861,8 +918,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
             rect = Rect.fromLTRB(rect.left, rect.top, rect.right, rect.top + rect.width / vRatio);
             break;
           case 1:
-            rect = Rect.fromCenter(
-                center: rect.center, width: _viewSize!.width, height: _viewSize!.height);
+            rect = Rect.fromCenter(center: rect.center, width: rect.width, height: rect.height);
             break;
           case 2:
             rect = Rect.fromLTRB(
@@ -877,8 +933,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
                 Rect.fromLTRB(rect.left, rect.top, rect.left + rect.height * vRatio, rect.bottom);
             break;
           case 1:
-            rect = Rect.fromCenter(
-                center: rect.center, width: _viewSize!.width, height: _viewSize!.height);
+            rect = Rect.fromCenter(center: rect.center, width: rect.width, height: rect.height);
             break;
           case 2:
             rect =
@@ -905,8 +960,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
   }) {
     final page = _document!.pages[pageNumber - 1];
     final pageRect = _layout!.pageLayouts[pageNumber - 1];
-    final scale = pageRect.width / page.width;
-    final area = rect.toRect(height: page.height, scale: scale);
+    final area = rect.toRect(page: page, scaledTo: pageRect.size);
     return area.translate(pageRect.left, pageRect.top);
   }
 
@@ -1273,6 +1327,11 @@ class PdfViewerController extends ValueListenable<Matrix4> {
   }) =>
       _state._goToPage(pageNumber: pageNumber, anchor: anchor, duration: duration);
 
+  /// Go to the specified area inside the page.
+  ///
+  /// [pageNumber] specifies the page number.
+  /// [rect] specifies the area to go in page coordinates.
+  /// [anchor] specifies how the page is positioned if the page is larger than the view.
   Future<void> goToRectInsidePage({
     required int pageNumber,
     required PdfRect rect,
@@ -1286,6 +1345,10 @@ class PdfViewerController extends ValueListenable<Matrix4> {
         duration: duration,
       );
 
+  /// Calculate the rectangle for the specified area inside the page.
+  ///
+  /// [pageNumber] specifies the page number.
+  /// [rect] specifies the area to go in page coordinates.
   Rect calcRectForRectInsidePage({
     required int pageNumber,
     required PdfRect rect,
@@ -1295,6 +1358,11 @@ class PdfViewerController extends ValueListenable<Matrix4> {
         rect: rect,
       );
 
+  /// Calculate the matrix for the specified area inside the page.
+  ///
+  /// [pageNumber] specifies the page number.
+  /// [rect] specifies the area to go in page coordinates.
+  /// [anchor] specifies how the page is positioned if the page is larger than the view.
   Matrix4 calcMatrixForRectInsidePage({
     required int pageNumber,
     required PdfRect rect,
@@ -1307,6 +1375,9 @@ class PdfViewerController extends ValueListenable<Matrix4> {
       );
 
   /// Go to the specified destination.
+  ///
+  /// [dest] specifies the destination.
+  /// [duration] specifies the duration of the animation.
   Future<bool> goToDest(
     PdfDest? dest, {
     Duration duration = const Duration(milliseconds: 200),
@@ -1314,10 +1385,13 @@ class PdfViewerController extends ValueListenable<Matrix4> {
       _state._goToDest(dest, duration: duration);
 
   /// Calculate the matrix for the specified destination.
+  ///
+  /// [dest] specifies the destination.
   Matrix4? calcMatrixForDest(PdfDest? dest) => _state._calcMatrixForDest(dest);
 
   /// Calculate the matrix for the page.
   ///
+  /// [pageNumber] specifies the page number.
   /// [anchor] specifies how the page is positioned if the page is larger than the view.
   Matrix4 calcMatrixForPage({
     required int pageNumber,
@@ -1327,6 +1401,7 @@ class PdfViewerController extends ValueListenable<Matrix4> {
 
   /// Calculate the matrix for the specified area.
   ///
+  /// [rect] specifies the area in document coordinates.
   /// [anchor] specifies how the page is positioned if the page is larger than the view.
   Matrix4 calcMatrixForArea({
     required Rect rect,

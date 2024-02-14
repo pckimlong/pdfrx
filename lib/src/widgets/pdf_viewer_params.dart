@@ -28,6 +28,8 @@ class PdfViewerParams {
     this.onInteractionStart,
     this.onInteractionUpdate,
     this.onDocumentChanged,
+    this.calculateInitialPageNumber,
+    this.onViewerReady,
     this.onPageChanged,
     this.getPageRenderingScale,
     this.scrollByMouseWheel = 0.2,
@@ -42,6 +44,7 @@ class PdfViewerParams {
     this.errorBannerBuilder,
     this.linkWidgetBuilder,
     this.pagePaintCallbacks,
+    this.onTextSelectionChange,
     this.forceReload = false,
   });
 
@@ -95,6 +98,8 @@ class PdfViewerParams {
   final PanAxis panAxis;
 
   /// See [InteractiveViewer.boundaryMargin] for details.
+  ///
+  /// The default is `EdgeInsets.all(double.infinity)`.
   final EdgeInsets? boundaryMargin;
 
   /// Annotation rendering mode.
@@ -123,7 +128,20 @@ class PdfViewerParams {
   final GestureScaleUpdateCallback? onInteractionUpdate;
 
   /// Function to notify that the document is loaded/changed.
+  ///
+  /// The function is called even if the document is null (it means the document is unloaded).
+  /// If you want to be notified when the viewer is ready to interact, use [onViewerReady] instead.
   final PdfViewerDocumentChangedCallback? onDocumentChanged;
+
+  /// Function called when the viewer is ready.
+  ///
+  /// Unlike [PdfViewerDocumentChangedCallback], this function is called after the viewer is ready to interact.
+  final PdfViewerReadyCallback? onViewerReady;
+
+  /// Function to calculate the initial page number.
+  ///
+  /// It is useful when you want to determine the initial page number based on the document content.
+  final PdfViewerCalculateInitialPageNumberFunction? calculateInitialPageNumber;
 
   /// Function called when the current page is changed.
   final PdfPageChangedCallback? onPageChanged;
@@ -245,7 +263,13 @@ class PdfViewerParams {
   /// Build link widget.
   final PdfLinkWidgetBuilder? linkWidgetBuilder;
 
+  /// Page paint callbacks.
+  ///
+  /// For the detail usage, see [PdfViewerPagePaintCallback].
   final List<PdfViewerPagePaintCallback>? pagePaintCallbacks;
+
+  /// Function to be notified when the text selection is changed.
+  final PdfViewerTextSelectionChangeCallback? onTextSelectionChange;
 
   /// Force reload the viewer.
   ///
@@ -298,6 +322,8 @@ class PdfViewerParams {
         other.onInteractionStart == onInteractionStart &&
         other.onInteractionUpdate == onInteractionUpdate &&
         other.onDocumentChanged == onDocumentChanged &&
+        other.calculateInitialPageNumber == calculateInitialPageNumber &&
+        other.onViewerReady == onViewerReady &&
         other.onPageChanged == onPageChanged &&
         other.getPageRenderingScale == getPageRenderingScale &&
         other.scrollByMouseWheel == scrollByMouseWheel &&
@@ -311,6 +337,7 @@ class PdfViewerParams {
         other.errorBannerBuilder == errorBannerBuilder &&
         other.linkWidgetBuilder == linkWidgetBuilder &&
         other.pagePaintCallbacks == pagePaintCallbacks &&
+        other.onTextSelectionChange == onTextSelectionChange &&
         other.forceReload == forceReload;
   }
 
@@ -331,6 +358,8 @@ class PdfViewerParams {
         onInteractionStart.hashCode ^
         onInteractionUpdate.hashCode ^
         onDocumentChanged.hashCode ^
+        calculateInitialPageNumber.hashCode ^
+        onViewerReady.hashCode ^
         onPageChanged.hashCode ^
         getPageRenderingScale.hashCode ^
         scrollByMouseWheel.hashCode ^
@@ -344,13 +373,28 @@ class PdfViewerParams {
         errorBannerBuilder.hashCode ^
         linkWidgetBuilder.hashCode ^
         pagePaintCallbacks.hashCode ^
+        onTextSelectionChange.hashCode ^
         forceReload.hashCode;
   }
 }
 
 /// Function to notify that the document is loaded/changed.
-typedef PdfViewerDocumentChangedCallback = void Function(
-    PdfDocument? documentRef);
+typedef PdfViewerDocumentChangedCallback = void Function(PdfDocument? document);
+
+/// Function to calculate the initial page number.
+///
+/// If the function returns null, the viewer will show the page of [PdfViewer.initialPageNumber].
+typedef PdfViewerCalculateInitialPageNumberFunction = int? Function(
+  PdfDocument document,
+  PdfViewerController controller,
+);
+
+/// Function called when the viewer is ready.
+///
+typedef PdfViewerReadyCallback = void Function(
+  PdfDocument document,
+  PdfViewerController controller,
+);
 
 /// Function called when the current page is changed.
 typedef PdfPageChangedCallback = void Function(int? pageNumber);
@@ -406,11 +450,37 @@ typedef PdfViewerErrorBannerBuilder = Widget Function(
   PdfDocumentRef documentRef,
 );
 
+/// Function to build link widget for [PdfLink].
+///
+/// [size] is the size of the link.
 typedef PdfLinkWidgetBuilder = Widget? Function(
     BuildContext context, PdfLink link, Size size);
 
+/// Function to paint things on page.
+///
+/// [canvas] is the canvas to paint on.
+/// [pageRect] is the rectangle of the page in the viewer.
+/// [page] is the page.
+///
+/// If you have some [PdfRect] that describes something on the page,
+/// you can use [PdfRect.toRect] to convert it to [Rect] and draw the rect on the canvas:
+///
+/// ```dart
+/// PdfRect pdfRect = ...;
+/// canvas.drawRect(
+///   pdfRect.toRectInPageRect(page: page, pageRect: pageRect),
+///   Paint()..color = Colors.red);
+/// ```
 typedef PdfViewerPagePaintCallback = void Function(
     ui.Canvas canvas, Rect pageRect, PdfPage page);
+
+/// Function to be notified when the text selection is changed.
+///
+/// [selection] is the selected text ranges.
+/// If page selection is cleared on page dispose (it means, the page is scrolled out of the view), [selection] is null.
+/// Otherwise, [selection] is the selected text ranges. If no selection is made, [selection] is an empty list.
+typedef PdfViewerTextSelectionChangeCallback = void Function(
+    PdfTextRanges? selection);
 
 /// When [PdfViewerController.goToPage] is called, the page is aligned to the specified anchor.
 ///

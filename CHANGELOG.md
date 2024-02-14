@@ -1,10 +1,95 @@
+# 0.4.44
+
+- FIXED: PdfViewerParams.boundaryMargin does not work correctly.
+
+# 0.4.43
+
+- Add note for dark/night mode support on README.md; the trick is originally introduced by [pckimlong](https://github.com/pckimlong) on #46.
+- FIXED: wrong PdfPageAnchor behavior with landscape pages
+
+# 0.4.42
+
+- FIXED: PdfDocumentRefData's operator== is broken (#66)
+
+# 0.4.41
+
+- Marker example for PdfViewerParams.onTextSelectionChange (#65)
+- Add more explanation for sourceName (#66)
+
+# 0.4.40
+
+- Introduces PdfViewerParams.onTextSelectionChange (#65) to know the last text selection
+
+# 0.4.39
+
+- Minor updates on text selection (still experimental......)
+
+# 0.4.38
+
+- Minor updates on text selection (still experimental...)
+- Minor fix on PdfPageView
+
+# 0.4.37
+
+- CMake version "3.18.1+" for #48, #62
+
+# 0.4.36
+
+- Introduces PdfJsConfiguration to configure pdf.js download URLs
+
+# 0.4.35
+
+- Download cache mechanism update (#57/#58)
+
+# 0.4.34
+
+- Document update
+
+# 0.4.33
+
+- Document update
+
+# 0.4.32
+
+- Add PdfViewerParams.calculateInitialPageNumber to calculate the initial page number dynamically
+- Add PdfViewerParams.onViewerReady to know when the viewer gets ready
+
+# 0.4.31
+
+- Remove explicit CMake version spec 3.18.1
+
+# 0.4.30
+
+- FIXED: Link URI contains null-terminator
+- Add support text/links on rotated pages
+- Stability updates for PdfTextSearcher
+- README.md/example updates
+- Revival of PdfViewer.data/PdfViewer.custom
+
+# 0.4.29
+
+- Minor fixes to PdfTextSearcher
+
+# 0.4.28
+
+- README.md/example updates
+
+# 0.4.27
+
+- Minor updates and README.md updates
+
+# 0.4.26
+
+- Introduces PdfTextSearcher that helps you to implement search UI feature (#47)
+- Example code is vastly changed to explain more about the widget functions
+
 # 0.4.25
 
 - FIXED: Able to scroll outside document area
 
 # 0.4.24
 
-- Huge refactoring on PdfViewerController; it's no longer TransformationController but just a ValueListenable<Matrix4>
+- Huge refactoring on PdfViewerController; it's no longer TransformationController but just a `ValueListenable<Matrix4>`
   - This fixes an "Unhandled Exception: Null check operator used on a null value" on widget state disposal (#46)
 
 # 0.4.23

@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -13,18 +12,21 @@ class PdfPageTextOverlay extends StatefulWidget {
     required this.registrar,
     required this.page,
     required this.pageRect,
+    this.onTextSelectionChange,
     super.key,
   });
 
   final SelectionRegistrar? registrar;
   final PdfPage page;
   final Rect pageRect;
+  final void Function(PdfTextRanges? ranges)? onTextSelectionChange;
 
   @override
   State<PdfPageTextOverlay> createState() => _PdfPageTextOverlayState();
 }
 
 class _PdfPageTextOverlayState extends State<PdfPageTextOverlay> {
+  PdfPageText? _pageText;
   List<PdfPageTextFragment>? fragments;
   SystemMouseCursor cursor = SystemMouseCursors.basic;
 
@@ -42,32 +44,44 @@ class _PdfPageTextOverlayState extends State<PdfPageTextOverlay> {
     }
   }
 
+  @override
+  void dispose() {
+    _release();
+
+    super.dispose();
+  }
+
+  void _release() {
+    if (_pageText != null) {
+      _notifySelectionChange(null);
+    }
+  }
+
+  void _notifySelectionChange(PdfTextRanges? ranges) {
+    widget.onTextSelectionChange?.call(ranges);
+  }
+
   bool _almostIdenticalY(double a, double b) {
     return (a - b).abs() < .25;
   }
 
   Future<void> _initText() async {
-    final pageText = await widget.page.loadText();
-    final ranges = <({int index, int end})>[];
+    _release();
+    final pageText = _pageText = await widget.page.loadText();
+    final fragments = <PdfPageTextFragment>[];
     double y = pageText.fragments[0].bounds.bottom;
     int start = 0;
     for (int i = 1; i < pageText.fragments.length; i++) {
       final fragment = pageText.fragments[i];
       if (!_almostIdenticalY(fragment.bounds.bottom, y)) {
-        ranges.add((index: start, end: i));
+        fragments.addAll(pageText.fragments.sublist(start, i));
         y = fragment.bounds.bottom;
         start = i;
       }
     }
     if (start < pageText.fragments.length) {
-      ranges.add((index: start, end: pageText.fragments.length));
-    }
-    ranges.sortByCompare((f) => pageText.fragments[f.index].bounds.bottom,
-        (a, b) => (b - a).sign.toInt());
-
-    final fragments = <PdfPageTextFragment>[];
-    for (final range in ranges) {
-      fragments.addAll(pageText.fragments.sublist(range.index, range.end));
+      fragments
+          .addAll(pageText.fragments.sublist(start, pageText.fragments.length));
     }
     this.fragments = fragments;
     if (mounted) {
@@ -187,6 +201,9 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
   List<PdfPageTextFragment> get _fragments => _textWidget._state.fragments!;
 
   @override
+  List<Rect> get boundingBoxes => <Rect>[paintBounds];
+
+  @override
   bool get sizedByParent => true;
   @override
   double computeMinIntrinsicWidth(double height) => _pageRect.size.width;
@@ -217,8 +234,17 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
   String? _selectedText;
   Rect? _selectedRect;
   Size? _sizeOnSelection;
+  PdfTextRanges? _selectedRanges;
 
   void _updateGeometry() {
+    _updateGeometryInternal();
+    _textWidget._state._notifySelectionChange(_selectedRanges);
+  }
+
+  void _updateGeometryInternal() {
+    _selectedRect = null;
+    _selectedRanges = PdfTextRanges.createEmpty(_textWidget._state._pageText!);
+
     if (_start == null || _end == null) {
       _geometry.value = _noSelection;
       return;
@@ -235,8 +261,6 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
 
     final selectionRects = <Rect>[];
     final sb = StringBuffer();
-    _selectedRect = null;
-    final scale = size.height / _page.height;
 
     int searchLineEnd(int start) {
       final lastIndex = _fragments.length - 1;
@@ -251,40 +275,44 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
       return _fragments.length;
     }
 
-    Iterable<({Rect rect, String text})> enumerateCharRects(
+    Iterable<({Rect rect, String text, PdfTextRange range})> enumerateCharRects(
         int start, int end) sync* {
       for (int i = start; i < end; i++) {
         final fragment = _fragments[i];
         if (fragment.charRects == null) {
           yield (
-            rect: fragment.bounds.toRect(
-              height: _page.height,
-              scale: scale,
+            rect: fragment.bounds.toRect(page: _page, scaledTo: size),
+            text: fragment.text,
+            range: PdfTextRange(
+              start: fragment.index,
+              end: fragment.end,
             ),
-            text: fragment.text
           );
         } else {
           for (int j = 0; j < fragment.charRects!.length; j++) {
             yield (
-              rect: fragment.charRects![j].toRect(
-                height: _page.height,
-                scale: scale,
+              rect: fragment.charRects![j].toRect(page: _page, scaledTo: size),
+              text: fragment.text.substring(j, j + 1),
+              range: PdfTextRange(
+                start: fragment.index + j,
+                end: fragment.index + j + 1,
               ),
-              text: fragment.text.substring(j, j + 1)
             );
           }
         }
       }
     }
 
-    ({Rect? rect, String text}) selectChars(
+    ({Rect? rect, String text, List<PdfTextRange> ranges}) selectChars(
         int start, int end, Rect lineSelectRect) {
       Rect? rect;
+      final ranges = <PdfTextRange>[];
       final sb = StringBuffer();
       for (final r in enumerateCharRects(start, end)) {
         if (!r.rect.intersect(lineSelectRect).isEmpty ||
             r.rect.bottom < lineSelectRect.bottom) {
           sb.write(r.text);
+          ranges.appendRange(r.range);
           if (rect == null) {
             rect = r.rect;
           } else {
@@ -292,17 +320,15 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
           }
         }
       }
-      return (rect: rect, text: sb.toString());
+      return (rect: rect, text: sb.toString(), ranges: ranges);
     }
 
     int? lastLineEnd;
     Rect? lastLineStartRect;
     for (int i = 0; i < _fragments.length;) {
-      final bounds =
-          _fragments[i].bounds.toRect(height: _page.height, scale: scale);
-      if (lastLineEnd == null && selectionRect.intersect(bounds).isEmpty) {
-        i++;
-      } else {
+      final bounds = _fragments[i].bounds.toRect(page: _page, scaledTo: size);
+      final intersects = !selectionRect.intersect(bounds).isEmpty;
+      if (intersects) {
         final lineEnd = searchLineEnd(i);
         final chars = selectChars(
             lastLineEnd ?? i,
@@ -315,9 +341,11 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
         if (chars.rect == null) continue;
         sb.write(chars.text);
         selectionRects.add(chars.rect!);
+        _selectedRanges!.ranges.appendAllRanges(chars.ranges);
+      } else {
+        i++;
       }
     }
-
     if (selectionRects.isEmpty) {
       _geometry.value = _noSelection;
       return;
@@ -327,9 +355,9 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
         selectionRects.reduce((a, b) => a.expandToInclude(b));
     _selectedRect = Rect.fromLTRB(
       _start?.dx ?? selectedBounds.left,
-      selectedBounds.top,
+      _start?.dy ?? selectedBounds.top,
       _end?.dx ?? selectedBounds.right,
-      selectedBounds.bottom,
+      _end?.dy ?? selectedBounds.bottom,
     );
     _selectedText = sb.toString();
 
@@ -370,8 +398,7 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
 
   void _selectFragment(Offset point) {
     for (final fragment in _fragments) {
-      final bounds = fragment.bounds
-          .toRect(height: _page.height, scale: size.height / _page.height);
+      final bounds = fragment.bounds.toRect(page: _page, scaledTo: size);
       if (bounds.contains(point)) {
         _start = bounds.topLeft;
         _end = bounds.bottomRight;
@@ -541,11 +568,33 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
   void paint(PaintingContext context, Offset offset) {
     super.paint(context, offset);
 
+    final scale =
+        _sizeOnSelection != null ? size.width / _sizeOnSelection!.width : 1.0;
+    // for (int i = 0; i < _fragments.length; i++) {
+    //   final f = _fragments[i];
+    //   final rect = f.bounds.toRect(page: _page, scaledTo: size);
+    //   context.canvas.drawRect(
+    //     rect.shift(offset),
+    //     Paint()
+    //       ..style = PaintingStyle.stroke
+    //       ..color = Colors.red
+    //       ..strokeWidth = 1,
+    //   );
+    // }
+
+    // if (_selectedRect != null) {
+    //   context.canvas.drawRect(
+    //     (_selectedRect! * scale).shift(offset),
+    //     Paint()
+    //       ..style = PaintingStyle.fill
+    //       ..color = Colors.blue.withAlpha(100),
+    //   );
+    // }
+
     if (!_geometry.value.hasSelection) {
       return;
     }
 
-    final scale = size.width / _sizeOnSelection!.width;
     for (final rect in _geometry.value.selectionRects) {
       context.canvas.drawRect(
         (rect * scale).shift(offset),
@@ -601,5 +650,21 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
     //   );
     //   return;
     // }
+  }
+}
+
+extension _PdfTextRangeListExt on List<PdfTextRange> {
+  void appendRange(PdfTextRange range) {
+    if (isNotEmpty && range.start >= last.start && range.start <= last.end) {
+      last = last.copyWith(end: range.end);
+    } else {
+      add(range);
+    }
+  }
+
+  void appendAllRanges(Iterable<PdfTextRange> ranges) {
+    for (final r in ranges) {
+      appendRange(r);
+    }
   }
 }

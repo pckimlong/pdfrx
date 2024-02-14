@@ -20,11 +20,11 @@ class PdfTextSearcher extends Listenable {
 
   Timer? _searchTextTimer; // timer to start search
   int _searchSession = 0; // current search session
-  List<PdfTextMatch> _matches = const [];
+  List<PdfTextRangeWithFragments> _matches = const [];
   List<int> _matchesPageStartIndices = const [];
   Pattern? _lastSearchPattern;
   int? _currentIndex;
-  PdfTextMatch? _currentMatch;
+  PdfTextRangeWithFragments? _currentMatch;
   int? _searchingPageNumber;
   int? _totalPageCount;
   bool _isSearching = false;
@@ -32,8 +32,8 @@ class PdfTextSearcher extends Listenable {
   /// The current match index in [matches] if available.
   int? get currentIndex => _currentIndex;
 
-  /// Get the match for the given index.
-  List<PdfTextMatch> get matches => _matches;
+  /// Get the current matches.
+  List<PdfTextRangeWithFragments> get matches => _matches;
 
   /// Whether there are any matches or not (so far).
   bool get hasMatches => _currentIndex != null && matches.isNotEmpty;
@@ -51,6 +51,10 @@ class PdfTextSearcher extends Listenable {
     return _searchingPageNumber! / _totalPageCount!;
   }
 
+  Pattern? get pattern => _lastSearchPattern;
+
+  int get searchSession => _searchSession;
+
   final List<VoidCallback> _listeners = [];
 
   void notifyListeners() {
@@ -64,26 +68,50 @@ class PdfTextSearcher extends Listenable {
   ///
   /// [pattern] is the text to search for. It can be a [String] or a [RegExp].
   /// If [caseInsensitive] is true, the search will be case insensitive.
+  /// If [goToFirstMatch] is true, the viewer will automatically go to the first match.
+  /// If [searchImmediately] is true, the search will start immediately,
+  /// otherwise it will wait for a short delay not to make the process too heavy.
   void startTextSearch(
     Pattern pattern, {
     bool caseInsensitive = true,
+    bool goToFirstMatch = true,
+    bool searchImmediately = false,
   }) {
     _cancelTextSearch();
     final searchSession = ++_searchSession;
-    _searchTextTimer = Timer(
-      const Duration(milliseconds: 500),
-      () {
-        // BUG: Pattern does not implement ==, so we can't do the exact comparison here; only Strings
-        // can be compared correctly...
-        if (_lastSearchPattern == pattern) return;
-        _lastSearchPattern = pattern;
-        if (pattern.isEmpty) {
-          _resetTextSearch();
-          return;
-        }
-        _startTextSearchInternal(pattern, searchSession, caseInsensitive);
-      },
-    );
+
+    void search() {
+      if (_isIdenticalPattern(_lastSearchPattern, pattern)) return;
+      _lastSearchPattern = pattern;
+      if (pattern.isEmpty) {
+        _resetTextSearch();
+        return;
+      }
+      _startTextSearchInternal(pattern, searchSession, caseInsensitive, goToFirstMatch);
+    }
+
+    if (searchImmediately) {
+      search();
+    } else {
+      _searchTextTimer = Timer(const Duration(milliseconds: 500), search);
+    }
+  }
+
+  bool _isIdenticalPattern(Pattern? a, Pattern? b) {
+    if (a is String && b is String) {
+      return a == b;
+    }
+    if (a is RegExp && b is RegExp) {
+      return a.pattern == b.pattern &&
+          a.isCaseSensitive == b.isCaseSensitive &&
+          a.isMultiLine == b.isMultiLine &&
+          a.isUnicode == b.isUnicode &&
+          a.isDotAll == b.isDotAll;
+    }
+    if (a == null && b == null) {
+      return true;
+    }
+    return false;
   }
 
   /// Reset the current search.
@@ -111,10 +139,14 @@ class PdfTextSearcher extends Listenable {
   }
 
   Future<void> _startTextSearchInternal(
-      Pattern text, int searchSession, bool caseInsensitive) async {
+    Pattern text,
+    int searchSession,
+    bool caseInsensitive,
+    bool goToFirstMatch,
+  ) async {
     await controller?.documentRef.resolveListenable().useDocument(
       (document) async {
-        final textMatches = <PdfTextMatch>[];
+        final textMatches = <PdfTextRangeWithFragments>[];
         final textMatchesPageStartIndex = <int>[];
         bool first = true;
         _isSearching = true;
@@ -138,9 +170,11 @@ class PdfTextSearcher extends Listenable {
 
           if (_matches.isNotEmpty && first) {
             first = false;
-            _currentIndex = 0;
-            _currentMatch = null;
-            goToMatchOfIndex(_currentIndex!);
+            if (goToFirstMatch) {
+              _currentIndex = 0;
+              _currentMatch = null;
+              goToMatchOfIndex(_currentIndex!);
+            }
           }
         }
       },
@@ -149,7 +183,7 @@ class PdfTextSearcher extends Listenable {
 
   /// Just a helper function to load the text of a page.
   Future<PdfPageText?> loadText({required int pageNumber}) async {
-    return await controller!.documentRef.resolveListenable().useDocument(
+    return await controller?.documentRef.resolveListenable().useDocument(
       (document) async {
         return await document.pages[pageNumber - 1].loadText();
       },
@@ -157,28 +191,35 @@ class PdfTextSearcher extends Listenable {
   }
 
   /// Go to the previous match.
-  Future<void> goToPrevMatch() async {
-    if (_currentIndex == null) return;
+  Future<int> goToPrevMatch() async {
+    if (_currentIndex == null) {
+      _currentIndex = _matches.length - 1;
+      return await goToMatchOfIndex(_currentIndex!);
+    }
     if (_currentIndex! > 0) {
       _currentIndex = _currentIndex! - 1;
-      notifyListeners();
-      await goToMatchOfIndex(_currentIndex!);
+      return await goToMatchOfIndex(_currentIndex!);
     }
+    return -1;
   }
 
   /// Go to the next match.
-  Future<void> goToNextMatch() async {
-    if (_currentIndex == null) return;
+  Future<int> goToNextMatch() async {
+    if (_currentIndex == null) {
+      _currentIndex = 0;
+      return await goToMatchOfIndex(_currentIndex!);
+    }
     if (_currentIndex! + 1 < _matches.length) {
       _currentIndex = _currentIndex! + 1;
-      notifyListeners();
-      await goToMatchOfIndex(_currentIndex!);
+      return await goToMatchOfIndex(_currentIndex!);
     }
+    return -1;
   }
 
   /// Go to the given match.
-  Future<void> goToMatch(PdfTextMatch match) async {
+  Future<void> goToMatch(PdfTextRangeWithFragments match) async {
     _currentMatch = match;
+    _currentIndex = _matches.indexOf(match);
     await controller?.ensureVisible(
       controller!.calcRectForRectInsidePage(
         pageNumber: match.pageNumber,
@@ -186,36 +227,39 @@ class PdfTextSearcher extends Listenable {
       ),
       margin: 50,
     );
+    controller?.invalidate();
   }
 
   /// Get the matches range for the given page number.
-  PdfTextMatchRange? getMatchesRangeForPage(int pageNumber) {
+  ({int start, int end})? getMatchesRangeForPage(int pageNumber) {
     if (_matchesPageStartIndices.length < pageNumber) return null;
     final start = _matchesPageStartIndices[pageNumber - 1];
     final end = _matchesPageStartIndices.length > pageNumber
         ? _matchesPageStartIndices[pageNumber]
         : _matches.length;
-    return PdfTextMatchRange(start: start, end: end);
+    return (start: start, end: end);
   }
 
   /// Go to the match of the given index.
-  Future<bool> goToMatchOfIndex(int index) async {
+  Future<int> goToMatchOfIndex(int index) async {
+    if (index < 0 || index >= _matches.length) return -1;
+    _currentIndex = index;
     await goToMatch(_matches[index]);
-    return true;
+    return index;
   }
 
   /// Paint callback to highlight the matches.
   ///
   /// Use this with [PdfViewerParams.pagePaintCallback] to highlight the matches.
   void pageTextMatchPaintCallback(ui.Canvas canvas, Rect pageRect, PdfPage page) {
-    final textMatches = getMatchesRangeForPage(page.pageNumber);
-    if (textMatches == null) return;
+    final range = getMatchesRangeForPage(page.pageNumber);
+    if (range == null) return;
 
-    final scale = pageRect.width / page.width;
-    for (int i = textMatches.start; i < textMatches.end; i++) {
+    for (int i = range.start; i < range.end; i++) {
       final m = _matches[i];
-      final rect =
-          m.bounds.toRect(height: page.height, scale: scale).translate(pageRect.left, pageRect.top);
+      final rect = m.bounds
+          .toRect(page: page, scaledTo: pageRect.size)
+          .translate(pageRect.left, pageRect.top);
       canvas.drawRect(
         rect,
         Paint()
@@ -233,12 +277,6 @@ class PdfTextSearcher extends Listenable {
 
   @override
   void removeListener(VoidCallback listener) => _listeners.remove(listener);
-}
-
-class PdfTextMatchRange {
-  const PdfTextMatchRange({required this.start, required this.end});
-  final int start;
-  final int end;
 }
 
 extension PatternExts on Pattern {

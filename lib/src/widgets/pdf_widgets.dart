@@ -89,7 +89,7 @@ class PdfDocumentViewBuilder extends StatefulWidget {
   final PdfDocumentRef documentRef;
 
   /// A builder that builds a widget tree with the PDF document.
-  final Widget Function(BuildContext context, PdfDocument? document) builder;
+  final PdfDocumentViewBuilderFunction builder;
 
   @override
   State<PdfDocumentViewBuilder> createState() => _PdfDocumentViewBuilderState();
@@ -129,6 +129,12 @@ class _PdfDocumentViewBuilderState extends State<PdfDocumentViewBuilder> {
     );
   }
 }
+
+/// A function that builds a widget tree with the PDF document.
+typedef PdfDocumentViewBuilderFunction = Widget Function(
+  BuildContext context,
+  PdfDocument? document,
+);
 
 /// Function to calculate the size of the page based on the size of the widget.
 ///
@@ -280,7 +286,8 @@ class _PdfPageViewState extends State<PdfPageView> {
     final document = widget.document;
     if (document == null ||
         widget.pageNumber < 1 ||
-        widget.pageNumber > document.pages.length) {
+        widget.pageNumber > document.pages.length ||
+        size.isEmpty) {
       return;
     }
     final page = document.pages[widget.pageNumber - 1];

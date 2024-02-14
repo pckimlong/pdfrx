@@ -52,6 +52,8 @@ abstract class PdfDocumentFactory {
     PdfPasswordProvider? passwordProvider,
     bool firstAttemptByEmptyPassword = true,
     PdfDownloadProgressCallback? progressCallback,
+    PdfDownloadReportCallback? reportCallback,
+    bool preferRangeAccess = false,
   });
 
   /// Singleton [PdfDocumentFactory] instance.
@@ -69,6 +71,17 @@ typedef PdfDownloadProgressCallback = void Function(
   int downloadedBytes, [
   int? totalBytes,
 ]);
+
+/// Callback function to report download status on completion.
+///
+/// [downloaded] is the number of bytes downloaded.
+/// [total] is the total number of bytes downloaded.
+/// [elapsedTime] is the time taken to download the file.
+typedef PdfDownloadReportCallback = void Function(
+  int downloaded,
+  int total,
+  Duration elapsedTime,
+);
 
 /// Function to provide password for encrypted PDF.
 ///
@@ -144,6 +157,9 @@ abstract class PdfDocument {
   /// [passwordProvider] is used to provide password for encrypted PDF. See [PdfPasswordProvider] for more info.
   /// [firstAttemptByEmptyPassword] is used to determine whether the first attempt to open the PDF is by empty password
   /// or not. For more info, see [PdfPasswordProvider].
+  ///
+  /// [sourceName] can be any arbitrary string to identify the source of the PDF; [data] does not identify the source
+  /// if such name is explicitly specified.
   static Future<PdfDocument> openData(
     Uint8List data, {
     PdfPasswordProvider? passwordProvider,
@@ -168,6 +184,9 @@ abstract class PdfDocument {
   /// [passwordProvider] is used to provide password for encrypted PDF. See [PdfPasswordProvider] for more info.
   /// [firstAttemptByEmptyPassword] is used to determine whether the first attempt to open the PDF is by empty password
   /// or not. For more info, see [PdfPasswordProvider].
+  ///
+  /// [sourceName] can be any arbitrary string to identify the source of the PDF; Neither of [read]/[fileSize]
+  /// identify the source if such name is explicitly specified.
   static Future<PdfDocument> openCustom({
     required FutureOr<int> Function(Uint8List buffer, int position, int size) read,
     required int fileSize,
@@ -198,17 +217,23 @@ abstract class PdfDocument {
   /// or not. For more info, see [PdfPasswordProvider].
   ///
   /// [progressCallback] is called when the download progress is updated (Not supported on Web).
+  /// [reportCallback] is called when the download is completed (Not supported on Web).
+  /// [preferRangeAccess] to prefer range access to download the PDF (Not supported on Web).
   static Future<PdfDocument> openUri(
     Uri uri, {
     PdfPasswordProvider? passwordProvider,
     bool firstAttemptByEmptyPassword = true,
     PdfDownloadProgressCallback? progressCallback,
+    PdfDownloadReportCallback? reportCallback,
+    bool preferRangeAccess = false,
   }) =>
       PdfDocumentFactory.instance.openUri(
         uri,
         passwordProvider: passwordProvider,
         firstAttemptByEmptyPassword: firstAttemptByEmptyPassword,
         progressCallback: progressCallback,
+        reportCallback: reportCallback,
+        preferRangeAccess: preferRangeAccess,
       );
 
   /// Pages.
@@ -238,6 +263,9 @@ abstract class PdfPage {
 
   /// PDF page height in points (height in pixels at 72 dpi) (rotated).
   double get height;
+
+  /// PDF page rotation.
+  PdfPageRotation get rotation;
 
   /// Render a sub-area or full image of specified PDF file.
   /// Returned image should be disposed after use.
@@ -282,6 +310,13 @@ abstract class PdfPage {
 
   /// Load links.
   Future<List<PdfLink>> loadLinks();
+}
+
+enum PdfPageRotation {
+  none,
+  clockwise90,
+  clockwise180,
+  clockwise270,
 }
 
 /// Annotation rendering mode.
@@ -392,9 +427,9 @@ abstract class PdfPageText {
 
   /// Search text with [pattern].
   ///
-  /// Just work like [Pattern.allMatches] but it returns stream of [PdfTextMatch].
+  /// Just work like [Pattern.allMatches] but it returns stream of [PdfTextRangeWithFragments].
   /// [caseInsensitive] is used to specify case-insensitive search only if [pattern] is [String].
-  Stream<PdfTextMatch> allMatches(
+  Stream<PdfTextRangeWithFragments> allMatches(
     Pattern pattern, {
     bool caseInsensitive = true,
   }) async* {
@@ -411,7 +446,8 @@ abstract class PdfPageText {
     final matches = pattern.allMatches(text);
     for (final match in matches) {
       if (match.start == match.end) continue;
-      final m = PdfTextMatch.fromTextRange(this, match.start, match.end);
+      final m =
+          PdfTextRangeWithFragments.fromTextRange(this, match.start, match.end);
       if (m != null) {
         yield m;
       }
@@ -451,6 +487,37 @@ abstract class PdfPageTextFragment {
 
   @override
   int get hashCode => index.hashCode ^ bounds.hashCode ^ text.hashCode;
+
+  /// Create a [PdfPageTextFragment].
+  static PdfPageTextFragment fromParams(
+    int index,
+    int length,
+    PdfRect bounds,
+    String text, {
+    List<PdfRect>? charRects,
+  }) =>
+      _PdfPageTextFragment(index, length, bounds, text, charRects: charRects);
+}
+
+class _PdfPageTextFragment extends PdfPageTextFragment {
+  _PdfPageTextFragment(
+    this.index,
+    this.length,
+    this.bounds,
+    this.text, {
+    this.charRects,
+  });
+
+  @override
+  final int index;
+  @override
+  final int length;
+  @override
+  final PdfRect bounds;
+  @override
+  final List<PdfRect>? charRects;
+  @override
+  final String text;
 }
 
 /// Used only for searching fragments with [lowerBound].
@@ -468,9 +535,91 @@ class _PdfPageTextFragmentForSearch extends PdfPageTextFragment {
   List<PdfRect>? get charRects => null;
 }
 
-/// Text match result in PDF page.
-class PdfTextMatch {
-  PdfTextMatch(
+/// Simple text range in a PDF page.
+///
+/// The text range is used to describe text selection in a page but it does not indicate the actual page text;
+/// [PdfTextRanges] contains multiple [PdfTextRange]s and the actual [PdfPageText] the ranges are associated with.
+class PdfTextRange {
+  const PdfTextRange({
+    required this.start,
+    required this.end,
+  });
+
+  /// Text start index in [PdfPageText.fullText].
+  final int start;
+
+  /// Text end index in [PdfPageText.fullText].
+  final int end;
+
+  PdfTextRange copyWith({
+    int? start,
+    int? end,
+  }) =>
+      PdfTextRange(
+        start: start ?? this.start,
+        end: end ?? this.end,
+      );
+
+  @override
+  int get hashCode => start ^ end;
+
+  @override
+  bool operator ==(Object other) {
+    return other is PdfTextRange && other.start == start && other.end == end;
+  }
+
+  @override
+  String toString() => '[$start $end]';
+
+  /// Convert to [PdfTextRangeWithFragments].
+  ///
+  /// The method is used to convert [PdfTextRange] to [PdfTextRangeWithFragments] using [PdfPageText].
+  PdfTextRangeWithFragments? toTextRangeWithFragments(PdfPageText pageText) =>
+      PdfTextRangeWithFragments.fromTextRange(pageText, start, end);
+}
+
+/// Text ranges in a PDF page typically used to describe text selection.
+class PdfTextRanges {
+  /// Create a [PdfTextRanges].
+  const PdfTextRanges({
+    required this.pageText,
+    required this.ranges,
+  });
+
+  /// Create a [PdfTextRanges] with empty ranges.
+  PdfTextRanges.createEmpty(this.pageText) : ranges = <PdfTextRange>[];
+
+  /// The page text the text ranges are associated with.
+  final PdfPageText pageText;
+
+  /// Text ranges.
+  final List<PdfTextRange> ranges;
+
+  /// Determine whether the text ranges are empty.
+  bool get isEmpty => ranges.isEmpty;
+
+  /// Determine whether the text ranges are *NOT* empty.
+  bool get isNotEmpty => !isEmpty;
+
+  /// Page number of the text ranges.
+  int get pageNumber => pageText.pageNumber;
+
+  /// Bounds of the text ranges.
+  PdfRect get bounds => ranges
+      .map((r) => r.toTextRangeWithFragments(pageText)!.bounds)
+      .boundingRect();
+
+  /// The composed text of the text ranges.
+  String get text =>
+      ranges.map((r) => pageText.fullText.substring(r.start, r.end)).join();
+}
+
+/// For backward compatibility; [PdfTextRangeWithFragments] is previously named [PdfTextMatch].
+typedef PdfTextMatch = PdfTextRangeWithFragments;
+
+/// Text range (start/end index) in PDF page and it's associated text and bounding rectangle.
+class PdfTextRangeWithFragments {
+  PdfTextRangeWithFragments(
     this.pageNumber,
     this.fragments,
     this.start,
@@ -493,15 +642,31 @@ class PdfTextMatch {
   /// Bounding rectangle of the text.
   final PdfRect bounds;
 
-  /// Create [PdfTextMatch] from text range in [PdfPageText].
-  static PdfTextMatch? fromTextRange(PdfPageText pageText, int start, int end) {
+  /// Create [PdfTextRangeWithFragments] from text range in [PdfPageText].
+  ///
+  /// When you implement search-to-highlight feature, the most easiest way is to use [PdfTextSearcher] but you can
+  /// of course implement your own search algorithm and use this method to create [PdfTextRangeWithFragments]:
+  ///
+  /// ```dart
+  /// PdfPageText pageText = ...;
+  /// final searchPattern = 'search text';
+  /// final textIndex = pageText.fullText.indexOf(searchPattern);
+  /// if (textIndex >= 0) {
+  ///  final range = PdfTextRangeWithFragments.fromTextRange(pageText, textIndex, textIndex + searchPattern.length);
+  ///  ...
+  /// }
+  /// ```
+  ///
+  /// To paint text highlights on PDF pages, see [PdfViewerParams.pagePaintCallbacks] and [PdfViewerPagePaintCallback].
+  static PdfTextRangeWithFragments? fromTextRange(
+      PdfPageText pageText, int start, int end) {
     if (start >= end) {
       return null;
     }
     final s = pageText.getFragmentIndexForTextIndex(start);
     final sf = pageText.fragments[s];
     if (start + 1 == end) {
-      return PdfTextMatch(
+      return PdfTextRangeWithFragments(
         pageText.pageNumber,
         [pageText.fragments[s]],
         start - sf.index,
@@ -513,7 +678,7 @@ class PdfTextMatch {
     final l = pageText.getFragmentIndexForTextIndex(end - 1);
     if (s == l) {
       if (sf.charRects == null) {
-        return PdfTextMatch(
+        return PdfTextRangeWithFragments(
           pageText.pageNumber,
           [pageText.fragments[s]],
           start - sf.index,
@@ -521,7 +686,7 @@ class PdfTextMatch {
           sf.bounds,
         );
       } else {
-        return PdfTextMatch(
+        return PdfTextRangeWithFragments(
           pageText.pageNumber,
           [pageText.fragments[s]],
           start - sf.index,
@@ -540,7 +705,7 @@ class PdfTextMatch {
     bounds = bounds.merge(
         lf.charRects != null ? lf.charRects!.take(end - lf.index).boundingRect() : lf.bounds);
 
-    return PdfTextMatch(
+    return PdfTextRangeWithFragments(
       pageText.pageNumber,
       pageText.fragments.sublist(s, l + 1),
       start - sf.index,
@@ -548,12 +713,27 @@ class PdfTextMatch {
       bounds,
     );
   }
+
+  @override
+  int get hashCode => pageNumber ^ start ^ end;
+
+  @override
+  bool operator ==(Object other) {
+    return other is PdfTextRangeWithFragments &&
+        other.pageNumber == pageNumber &&
+        other.start == start &&
+        other.end == end &&
+        other.bounds == bounds &&
+        listEquals(other.fragments, fragments);
+  }
 }
 
 /// Rectangle in PDF page coordinates.
 ///
 /// Please note that PDF page coordinates is different from Flutter's coordinate.
-/// PDF page coordinates's origin is at the bottom-left corner and Y-axis is pointing upward; [bottom] is generally smaller than [top].
+/// PDF page coordinates's origin is at the bottom-left corner and Y-axis is pointing upward;
+/// [bottom] is generally smaller than [top].
+/// The unit is normally in points (1/72 inch).
 @immutable
 class PdfRect {
   const PdfRect(this.left, this.top, this.right, this.bottom);
@@ -598,15 +778,60 @@ class PdfRect {
   /// Convert to [Rect] in Flutter coordinate. [height] specifies the height of the page (original size).
   /// [scale] is used to scale the rectangle.
   Rect toRect({
-    required double height,
-    double scale = 1.0,
+    required PdfPage page,
+    Size? scaledTo,
+    int? rotation,
+  }) {
+    final rotated = rotate(rotation ?? page.rotation.index, page);
+    final scale = scaledTo == null ? 1.0 : scaledTo.height / page.height;
+    return Rect.fromLTRB(
+      rotated.left * scale,
+      (page.height - rotated.top) * scale,
+      rotated.right * scale,
+      (page.height - rotated.bottom) * scale,
+    );
+  }
+
+  ///  Convert to [Rect] in Flutter coordinate using [pageRect] as the page's bounding rectangle.
+  Rect toRectInPageRect({
+    required PdfPage page,
+    required Rect pageRect,
   }) =>
-      Rect.fromLTRB(
-        left * scale,
-        (height - top) * scale,
-        right * scale,
-        (height - bottom) * scale,
-      );
+      toRect(page: page, scaledTo: pageRect.size)
+          .translate(pageRect.left, pageRect.top);
+
+  PdfRect rotate(int rotation, PdfPage page) {
+    final swap = (page.rotation.index & 1) == 1;
+    final width = swap ? page.height : page.width;
+    final height = swap ? page.width : page.height;
+    switch (rotation & 3) {
+      case 0:
+        return this;
+      case 1:
+        return PdfRect(
+          bottom,
+          width - left,
+          top,
+          width - right,
+        );
+      case 2:
+        return PdfRect(
+          width - right,
+          height - bottom,
+          width - left,
+          height - top,
+        );
+      case 3:
+        return PdfRect(
+          height - top,
+          right,
+          height - bottom,
+          left,
+        );
+      default:
+        throw ArgumentError.value(rotate, 'rotate');
+    }
+  }
 
   @override
   bool operator ==(Object other) {
@@ -634,7 +859,7 @@ extension PdfRectsExt on Iterable<PdfRect> {
   PdfRect boundingRect() => reduce((a, b) => a.merge(b));
 }
 
-/// Defines the page and inner-page location to jump to.
+/// PDF [Explicit Destination](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf#page=374) the page and inner-page location to jump to.
 @immutable
 class PdfDest {
   const PdfDest(this.pageNumber, this.command, this.params);
