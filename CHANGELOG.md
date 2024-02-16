@@ -5,6 +5,7 @@
   - `flutter: '>=3.19.0-0.4.pre'`
   - `web: ^0.4.2`
     I'll update them as soon as [pub.dev upgrades their toolchains](https://github.com/dart-lang/pub-dev/issues/7484#issuecomment-1948206197)
+- pdf.js interop refactoring
 
 # 1.0.5
 
