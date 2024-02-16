@@ -170,9 +170,7 @@ class PdfDocumentWeb extends PdfDocument {
     required String sourceName,
     void Function()? onDispose,
   }) async {
-    final permsObj =
-        await js_util.promiseToFuture<List?>(document.getPermissions());
-    final perms = permsObj?.cast<int>();
+    final perms = (await document.getPermissions().toFuture)?.cast<int>();
 
     final doc = PdfDocumentWeb._(
       document,
@@ -199,8 +197,7 @@ class PdfDocumentWeb extends PdfDocument {
   }
 
   Future<PdfPage> _getPage(PdfjsDocument document, int pageNumber) async {
-    final page =
-        await js_util.promiseToFuture<PdfjsPage>(_document.getPage(pageNumber));
+    final page = await _document.getPage(pageNumber).toFuture;
     final vp1 = page.getViewport(PdfjsViewportParams(scale: 1));
     return PdfPageWeb._(
         document: this,
@@ -221,8 +218,7 @@ class PdfDocumentWeb extends PdfDocument {
   Future<Object?> _getDestObject(dynamic dest) async {
     if (dest == null) return null;
     if (dest is String) {
-      return await js_util
-          .promiseToFuture<dynamic>(_document.getDestination(dest));
+      return await _document.getDestination(dest).toFuture;
     } else {
       return dest;
     }
@@ -230,8 +226,7 @@ class PdfDocumentWeb extends PdfDocument {
 
   @override
   Future<List<PdfOutlineNode>> loadOutline() async {
-    final outline =
-        await js_util.promiseToFuture<List<dynamic>?>(_document.getOutline());
+    final outline = await _document.getOutline().toFuture;
     if (outline == null) return [];
     final nodes = <PdfOutlineNode>[];
     for (final node in outline) {
@@ -261,9 +256,10 @@ class PdfDocumentWeb extends PdfDocument {
     final params =
         destObj.length < 3 ? null : destObj.sublist(2).cast<double?>();
     return PdfDest(
-        (await js_util.promiseToFuture<int>(_document.getPageIndex(ref))) + 1,
-        _parseCmdStr(cmdStr),
-        params);
+      await _document.getPageIndex(ref).toFuture + 1,
+      _parseCmdStr(cmdStr),
+      params,
+    );
   }
 
   static PdfDestCommand _parseCmdStr(String cmdStr) {
@@ -407,7 +403,7 @@ class PdfPageWeb extends PdfPage {
       canvas.context2D.fillRect(0, 0, width, height);
     }
 
-    await js_util.promiseToFuture(page
+    await page
         .render(
           PdfjsRenderContext(
             canvasContext: canvas.context2D,
@@ -415,7 +411,8 @@ class PdfPageWeb extends PdfPage {
             annotationMode: annotationRenderingMode.index,
           ),
         )
-        .promise);
+        .promise
+        .toFuture;
 
     final src = canvas.context2D
         .getImageData(0, 0, width, height)
@@ -431,11 +428,8 @@ class PdfPageWeb extends PdfPage {
 
   @override
   Future<List<PdfLink>> loadLinks() async {
-    final annots = await js_util.promiseToFuture<List>(
-      page.getAnnotations(
-        PdfjsGetAnnotationsParameters(),
-      ),
-    );
+    final annots =
+        await page.getAnnotations(PdfjsGetAnnotationsParameters()).toFuture;
     final links = <PdfLink>[];
     for (final annot in annots) {
       if (annot == null || annot.subtype != 'Link') {
@@ -521,13 +515,13 @@ class PdfPageTextWeb extends PdfPageText {
   final List<PdfPageTextFragment> fragments;
 
   static Future<PdfPageTextWeb> _loadText(PdfPageWeb page) async {
-    final content = await js_util.promiseToFuture<PdfjsTextContent>(
-      page.page.getTextContent(
-        PdfjsGetTextContentParameters()
-          ..includeMarkedContent = false
-          ..disableNormalization = false,
-      ),
-    );
+    final content = await page.page
+        .getTextContent(
+          PdfjsGetTextContentParameters()
+            ..includeMarkedContent = false
+            ..disableNormalization = false,
+        )
+        .toFuture;
     final sb = StringBuffer();
     final fragments = <PdfPageTextFragmentWeb>[];
     for (final item in content.items.cast<PdfjsTextItem>()) {

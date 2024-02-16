@@ -12,38 +12,53 @@ import 'package:web/web.dart' as web;
 
 import '../../pdfrx.dart';
 
+/// Default pdf.js version
+const _pdfjsVersion = '3.11.174';
+
+/// Default pdf.js URL
+const _pdfjsUrl =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$_pdfjsVersion/pdf.min.js';
+
+/// Default pdf.worker.js URL
+const _pdfjsWorkerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$_pdfjsVersion/pdf.worker.min.js';
+
+/// Default CMap URL
+const _pdfjsCMapUrl =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$_pdfjsVersion/cmaps/';
+
 bool get _isPdfjsLoaded => hasProperty(globalThis, 'pdfjsLib');
 
 @JS('pdfjsLib.getDocument')
 external _PDFDocumentLoadingTask _pdfjsGetDocument(dynamic data);
-
-@JS('pdfRenderOptions')
-external Object _pdfRenderOptions;
 
 @JS('pdfjsLib.GlobalWorkerOptions.workerSrc')
 external set _pdfjsWorkerSrc(String src);
 
 @JS()
 @anonymous
-class _PDFDocumentLoadingTask {
-  external Object get promise;
+@staticInterop
+class Promise<T> {}
+
+extension PromiseExts<T> on Promise<T> {
+  Future<T> get toFuture => promiseToFuture<T>(this);
 }
 
-Map<String, dynamic> _getParams(Map<String, dynamic> jsParams) {
-  final params = {
-    'cMapUrl': getProperty(_pdfRenderOptions, 'cMapUrl'),
-    'cMapPacked': getProperty(_pdfRenderOptions, 'cMapPacked'),
-  }..addAll(jsParams);
-  final otherParams = getProperty(_pdfRenderOptions, 'params');
-  if (otherParams != null) {
-    params.addAll(otherParams);
-  }
-  return params;
+@JS()
+@staticInterop
+@anonymous
+class _PDFDocumentLoadingTask {}
+
+extension on _PDFDocumentLoadingTask {
+  external Promise<PdfjsDocument> get promise;
 }
 
 Future<PdfjsDocument> _pdfjsGetDocumentJsParams(Map<String, dynamic> jsParams) {
-  return promiseToFuture<PdfjsDocument>(
-      _pdfjsGetDocument(jsify(_getParams(jsParams))).promise);
+  final params = <String, dynamic>{
+    'cMapUrl': PdfJsConfiguration.configuration?.cMapUrl ?? _pdfjsCMapUrl,
+    'cMapPacked': PdfJsConfiguration.configuration?.cMapPacked ?? true,
+  }..addAll(jsParams);
+  return _pdfjsGetDocument(jsify(params)).promise.toFuture;
 }
 
 Future<PdfjsDocument> pdfjsGetDocument(String url, {String? password}) =>
@@ -54,35 +69,40 @@ Future<PdfjsDocument> pdfjsGetDocumentFromData(ByteBuffer data,
     _pdfjsGetDocumentJsParams({'data': data, 'password': password});
 
 @JS()
+@staticInterop
 @anonymous
-class PdfjsDocument {
-  external Object getPage(int pageNumber);
-  external Object getPermissions();
+class PdfjsDocument {}
+
+extension PdfjsDocumentExts on PdfjsDocument {
+  external Promise<PdfjsPage> getPage(int pageNumber);
+  external Promise<List?> getPermissions();
   external int get numPages;
   external void destroy();
 
-  external Object getPageIndex(PdfjsRef ref);
-  external Object getDestination(String id);
-  external Object getOutline();
+  external Promise<int> getPageIndex(PdfjsRef ref);
+  external Promise<Object> getDestination(String id);
+  external Promise<List<dynamic>?> getOutline();
 }
 
 @JS()
+@staticInterop
 @anonymous
-class PdfjsPage {
-  external PdfjsViewport getViewport(PdfjsViewportParams params);
+class PdfjsPage {}
 
-  /// `viewport` for [PdfjsViewport] and `transform` for
+extension PdfjsPageExts on PdfjsPage {
+  external PdfjsViewport getViewport(PdfjsViewportParams params);
   external PdfjsRender render(PdfjsRenderContext params);
   external int get pageNumber;
   external int get rotate;
   external num get userUnit;
   external List<double> get view;
 
-  external Object getTextContent(PdfjsGetTextContentParameters params);
+  external Promise<PdfjsTextContent> getTextContent(
+      PdfjsGetTextContentParameters params);
   external ReadableStream streamTextContent(
       PdfjsGetTextContentParameters params);
 
-  external Object getAnnotations(PdfjsGetAnnotationsParameters params);
+  external Promise<List> getAnnotations(PdfjsGetAnnotationsParameters params);
 }
 
 @JS()
@@ -174,7 +194,7 @@ class PdfjsRenderContext {
 @JS()
 @anonymous
 class PdfjsRender {
-  external Future<void> get promise;
+  external Promise<void> get promise;
 }
 
 @JS()
@@ -299,13 +319,8 @@ Future<void> _pdfjsInitialize() async {
     _pdfjsInitialized = true;
     return;
   }
-  // https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs
-  // https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.mjs
-  // https://unpkg.com/pdfjs-dist@4.0.379/build/pdf.min.mjs
-  const version = '3.11.174';
 
-  final pdfJsSrc = PdfJsConfiguration.configuration?.pdfJsSrc ??
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$version/pdf.min.js';
+  final pdfJsSrc = PdfJsConfiguration.configuration?.pdfJsSrc ?? _pdfjsUrl;
   try {
     final script = web.document.createElement('script') as web.HTMLScriptElement
       ..type = 'text/javascript'
@@ -323,13 +338,8 @@ Future<void> _pdfjsInitialize() async {
   if (!_isPdfjsLoaded) {
     throw StateError('Failed to load pdfjs');
   }
-  _pdfjsWorkerSrc = PdfJsConfiguration.configuration?.workerSrc ??
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$version/pdf.worker.min.js';
-  _pdfRenderOptions = jsify({
-    'cMapUrl': PdfJsConfiguration.configuration?.cMapUrl ??
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$version/cmaps/',
-    'cMapPacked': PdfJsConfiguration.configuration?.cMapPacked ?? true,
-  });
+  _pdfjsWorkerSrc =
+      PdfJsConfiguration.configuration?.workerSrc ?? _pdfjsWorkerSrc;
 
   _pdfjsInitialized = true;
 }
