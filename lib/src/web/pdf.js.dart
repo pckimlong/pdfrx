@@ -347,16 +347,16 @@ Future<void> _pdfjsInitialize() async {
 @JS()
 @anonymous
 class ReadableStream {
-  external Object cancel();
+  external Promise<void> cancel();
   external ReadableStreamDefaultReader getReader(dynamic options);
 }
 
 @JS()
 @anonymous
 class ReadableStreamDefaultReader {
-  external Object cancel(Object reason);
-  external Object read();
-  external Object releaseLock();
+  external Promise<Object> cancel(Object reason);
+  external Promise<ReadableStreamChunk> read();
+  external void releaseLock();
 }
 
 @JS()
