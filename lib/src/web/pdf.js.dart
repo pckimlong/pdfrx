@@ -3,7 +3,6 @@
 @JS()
 library pdf.js;
 
-import 'dart:js' as js;
 import 'dart:js_util';
 import 'dart:typed_data';
 
@@ -13,7 +12,7 @@ import 'package:web/web.dart' as web;
 
 import '../../pdfrx.dart';
 
-bool get _isPdfjsLoaded => js.context.hasProperty('pdfjsLib');
+bool get _isPdfjsLoaded => hasProperty(globalThis, 'pdfjsLib');
 
 @JS('pdfjsLib.getDocument')
 external _PDFDocumentLoadingTask _pdfjsGetDocument(dynamic data);
