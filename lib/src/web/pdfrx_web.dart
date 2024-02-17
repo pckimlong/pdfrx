@@ -528,20 +528,7 @@ class PdfPageTextWeb extends PdfPageText {
       final x = item.transform[4];
       final y = item.transform[5];
       final str = item.hasEOL ? '${item.str}\n' : item.str;
-      if (str != '\n' || fragments.isEmpty) {
-        fragments.add(
-          PdfPageTextFragmentWeb(
-            sb.length,
-            PdfRect(
-              x,
-              y + item.height.toDouble(),
-              x + item.width.toDouble(),
-              y,
-            ),
-            str,
-          ),
-        );
-      } else {
+      if (str == '\n' && fragments.isNotEmpty) {
         final prev = fragments.last;
         fragments.add(
           PdfPageTextFragmentWeb(
@@ -551,6 +538,19 @@ class PdfPageTextWeb extends PdfPageText {
               prev.bounds.top,
               prev.bounds.right + item.width.toDouble(),
               prev.bounds.bottom,
+            ),
+            str,
+          ),
+        );
+      } else {
+        fragments.add(
+          PdfPageTextFragmentWeb(
+            sb.length,
+            PdfRect(
+              x,
+              y + item.height.toDouble(),
+              x + item.width.toDouble(),
+              y,
             ),
             str,
           ),
