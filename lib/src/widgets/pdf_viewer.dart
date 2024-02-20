@@ -366,7 +366,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
       return Container(
         color: widget.params.backgroundColor,
         child: Focus(
-          onKey: _onKey,
+          onKeyEvent: _onKey,
           child: StreamBuilder(
               stream: _stream,
               builder: (context, snapshot) {
@@ -408,8 +408,13 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
 
   int? _gotoTargetPageNumber;
 
-  KeyEventResult _onKey(FocusNode node, RawKeyEvent event) {
-    final isDown = event is RawKeyDownEvent;
+  /// Key pressing state of ⌘ or Control depending on the platform.
+  static bool get _isCommandKeyPressed => Platform.isMacOS || Platform.isIOS
+      ? HardwareKeyboard.instance.isMetaPressed
+      : HardwareKeyboard.instance.isControlPressed;
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    final isDown = event is KeyDownEvent;
     switch (event.logicalKey) {
       case LogicalKeyboardKey.pageUp:
         if (isDown) {
@@ -432,12 +437,12 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
         }
         return KeyEventResult.handled;
       case LogicalKeyboardKey.equal:
-        if (isDown && event.isCommandKeyPressed) {
+        if (isDown && _isCommandKeyPressed) {
           _zoomUp();
         }
         return KeyEventResult.handled;
       case LogicalKeyboardKey.minus:
-        if (isDown && event.isCommandKeyPressed) {
+        if (isDown && _isCommandKeyPressed) {
           _zoomDown();
         }
         return KeyEventResult.handled;
@@ -1231,11 +1236,20 @@ class PdfPageLayout {
 /// You can check whether the controller is associated or not by checking [isReady] property.
 class PdfViewerController extends ValueListenable<Matrix4> {
   _PdfViewerState? __state;
+  final _listeners = <VoidCallback>[];
 
   static const maxZoom = 8.0;
 
   void _attach(_PdfViewerState? state) {
+    __state?._txController.removeListener(_notifyListeners);
     __state = state;
+    __state?._txController.addListener(_notifyListeners);
+  }
+
+  void _notifyListeners() {
+    for (final listener in _listeners) {
+      listener();
+    }
   }
 
   _PdfViewerState get _state {
@@ -1281,10 +1295,10 @@ class PdfViewerController extends ValueListenable<Matrix4> {
   set value(Matrix4 newValue) => _state._txController.value = makeMatrixInSafeRange(newValue);
 
   @override
-  void addListener(ui.VoidCallback listener) => _state._txController.addListener(listener);
+  void addListener(ui.VoidCallback listener) => _listeners.add(listener);
 
   @override
-  void removeListener(ui.VoidCallback listener) => _state._txController.removeListener(listener);
+  void removeListener(ui.VoidCallback listener) => _listeners.remove(listener);
 
   /// Restrict matrix to the safe range.
   Matrix4 makeMatrixInSafeRange(Matrix4 newValue) => _state._makeMatrixInSafeRange(newValue);
@@ -1560,12 +1574,6 @@ class _CustomPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
-
-extension _RawKeyEventExt on RawKeyEvent {
-  /// Key pressing state of ⌘ or Control depending on the platform.
-  bool get isCommandKeyPressed =>
-      Platform.isMacOS || Platform.isIOS ? isMetaPressed : isControlPressed;
 }
 
 Widget _defaultErrorBannerBuilder(

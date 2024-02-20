@@ -1,3 +1,40 @@
+# 1.0.6
+
+- Due to the pub.dev version issues, the version introduces a "temporary workaround", which downgrades several packages:
+  - `sdk: '>=3.3.0-76.0.dev <4.0.0'`
+  - `flutter: '>=3.19.0-0.4.pre'`
+  - `web: ^0.4.2`
+    I'll update them as soon as [pub.dev upgrades their toolchains](https://github.com/dart-lang/pub-dev/issues/7484#issuecomment-1948206197)
+- pdf.js interop refactoring
+
+# 1.0.5
+
+_NOTE: On pub.dev, 1.0.0+ versions gets [[ANALYSIS ISSUE]](https://pub.dev/packages/pdfrx/versions/1.0.5-testing-version-constraints-1/score). It does not affect your code consistency but API reference is not available until [pub.dev upgrades their toolchains](https://github.com/dart-lang/pub-dev/issues/7484#issuecomment-1948206197)._
+
+- Requires Flutter 3.19/Dart 3.3
+
+# 1.0.4
+
+- Rollback version constraints to the older stable versions...
+  - I've created an issue for pub.dev: <https://github.com/dart-lang/pub-dev/issues/7484>
+
+# 1.0.3
+
+- Again, `flutter: '>=3.19.0-0.4.pre'`
+
+# 1.0.2
+
+- To make the pub.dev analyzer work, we should use `sdk: '>=3.3.0-76.0.dev <4.0.0'` as version constraint...
+
+# 1.0.1
+
+- PdfViewerController.addListener/removeListener independently has listener list on it to make it work regardless of PdfViewer attached or not (#74)
+
+# 1.0.0
+
+- Requires Flutter 3.19/Dart 3.3
+- Update Web code to use package:web (removing dependency to dart:html)
+
 # 0.4.44
 
 - FIXED: PdfViewerParams.boundaryMargin does not work correctly.
