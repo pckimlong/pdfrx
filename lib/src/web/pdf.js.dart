@@ -3,10 +3,10 @@
 @JS()
 library pdf.js;
 
+import 'dart:js_interop';
 import 'dart:js_util';
 import 'dart:typed_data';
 
-import 'package:js/js.dart';
 import 'package:synchronized/extension.dart';
 import 'package:web/web.dart' as web;
 
@@ -16,104 +16,105 @@ import '../../pdfrx.dart';
 const _pdfjsVersion = '3.11.174';
 
 /// Default pdf.js URL
-const _pdfjsUrl =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$_pdfjsVersion/pdf.min.js';
+const _pdfjsUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$_pdfjsVersion/pdf.min.js';
 
 /// Default pdf.worker.js URL
 const _pdfjsWorkerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$_pdfjsVersion/pdf.worker.min.js';
 
 /// Default CMap URL
-const _pdfjsCMapUrl =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$_pdfjsVersion/cmaps/';
+const _pdfjsCMapUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$_pdfjsVersion/cmaps/';
 
 bool get _isPdfjsLoaded => hasProperty(globalThis, 'pdfjsLib');
 
 @JS('pdfjsLib.getDocument')
-external _PDFDocumentLoadingTask _pdfjsGetDocument(dynamic data);
+external _PDFDocumentLoadingTask _pdfjsGetDocument(_PdfjsGetDocumentParams data);
+
+extension type _PdfjsGetDocumentParams._(JSObject _) implements JSObject {
+  external _PdfjsGetDocumentParams({
+    String? url,
+    JSArrayBuffer? data,
+    String? password,
+    String? cMapUrl,
+    bool? cMapPacked,
+  });
+
+  external String? get url;
+  external JSArrayBuffer? get data;
+  external String? get password;
+  external String? get cMapUrl;
+  external bool? get cMapPacked;
+}
 
 @JS('pdfjsLib.GlobalWorkerOptions.workerSrc')
 external set _pdfjsWorkerSrc(String src);
 
-@JS()
-@anonymous
-@staticInterop
-class Promise<T> {}
-
-extension PromiseExts<T> on Promise<T> {
-  Future<T> get toFuture => promiseToFuture<T>(this);
+extension type _PDFDocumentLoadingTask(JSObject _) implements JSObject {
+  external JSPromise<PdfjsDocument> get promise;
 }
 
-@JS()
-@staticInterop
-@anonymous
-class _PDFDocumentLoadingTask {}
+Future<PdfjsDocument> pdfjsGetDocument(String url, {String? password}) => _pdfjsGetDocument(
+      _PdfjsGetDocumentParams(
+        url: url,
+        password: password,
+        cMapUrl: PdfJsConfiguration.configuration?.cMapUrl ?? _pdfjsCMapUrl,
+        cMapPacked: PdfJsConfiguration.configuration?.cMapPacked ?? true,
+      ),
+    ).promise.toDart;
 
-extension on _PDFDocumentLoadingTask {
-  external Promise<PdfjsDocument> get promise;
-}
+Future<PdfjsDocument> pdfjsGetDocumentFromData(ByteBuffer data, {String? password}) =>
+    _pdfjsGetDocument(
+      _PdfjsGetDocumentParams(
+        data: data.toJS,
+        password: password,
+        cMapUrl: PdfJsConfiguration.configuration?.cMapUrl,
+        cMapPacked: PdfJsConfiguration.configuration?.cMapPacked,
+      ),
+    ).promise.toDart;
 
-Future<PdfjsDocument> _pdfjsGetDocumentJsParams(Map<String, dynamic> jsParams) {
-  final params = <String, dynamic>{
-    'cMapUrl': PdfJsConfiguration.configuration?.cMapUrl ?? _pdfjsCMapUrl,
-    'cMapPacked': PdfJsConfiguration.configuration?.cMapPacked ?? true,
-  }..addAll(jsParams);
-  return _pdfjsGetDocument(jsify(params)).promise.toFuture;
-}
-
-Future<PdfjsDocument> pdfjsGetDocument(String url, {String? password}) =>
-    _pdfjsGetDocumentJsParams({'url': url, 'password': password});
-
-Future<PdfjsDocument> pdfjsGetDocumentFromData(ByteBuffer data,
-        {String? password}) =>
-    _pdfjsGetDocumentJsParams({'data': data, 'password': password});
-
-@JS()
-@staticInterop
-@anonymous
-class PdfjsDocument {}
-
-extension PdfjsDocumentExts on PdfjsDocument {
-  external Promise<PdfjsPage> getPage(int pageNumber);
-  external Promise<List?> getPermissions();
+extension type PdfjsDocument._(JSObject _) implements JSObject {
+  external JSPromise<PdfjsPage> getPage(int pageNumber);
+  external JSPromise<JSArray<JSNumber>?> getPermissions();
   external int get numPages;
   external void destroy();
 
-  external Promise<int> getPageIndex(PdfjsRef ref);
-  external Promise<Object> getDestination(String id);
-  external Promise<List<dynamic>?> getOutline();
+  external JSPromise<JSNumber> getPageIndex(PdfjsRef ref);
+  external JSPromise<JSObject> getDestination(String id);
+  external JSPromise<JSArray<PdfjsOutlineNode>?> getOutline();
 }
 
-@JS()
-@staticInterop
-@anonymous
-class PdfjsPage {}
-
-extension PdfjsPageExts on PdfjsPage {
+extension type PdfjsPage._(JSObject _) implements JSObject {
   external PdfjsViewport getViewport(PdfjsViewportParams params);
   external PdfjsRender render(PdfjsRenderContext params);
   external int get pageNumber;
   external int get rotate;
-  external num get userUnit;
-  external List<double> get view;
+  external JSNumber get userUnit;
+  external JSArray<JSNumber> get view;
 
-  external Promise<PdfjsTextContent> getTextContent(
-      PdfjsGetTextContentParameters params);
-  external ReadableStream streamTextContent(
-      PdfjsGetTextContentParameters params);
+  external JSPromise<PdfjsTextContent> getTextContent(PdfjsGetTextContentParameters params);
+  external ReadableStream streamTextContent(PdfjsGetTextContentParameters params);
 
-  external Promise<List> getAnnotations(PdfjsGetAnnotationsParameters params);
+  external JSPromise<JSArray<PdfjsAnnotation>> getAnnotations(PdfjsGetAnnotationsParameters params);
 }
 
-@JS()
-@anonymous
-class PdfjsViewportParams {
-  external factory PdfjsViewportParams(
+extension type PdfjsAnnotation._(JSObject _) implements JSObject {
+  external String get subtype;
+  external int get annotationType;
+  external JSArray<JSNumber> get rect;
+  external String? get url;
+  external String? get unsafeUrl;
+  external int get annotationFlags;
+  external JSAny? get dest;
+}
+
+extension type PdfjsViewportParams._(JSObject _) implements JSObject {
+  external PdfjsViewportParams(
       {double scale,
       int rotation, // 0, 90, 180, 270
       double offsetX = 0,
       double offsetY = 0,
       bool dontFlip = false});
+
   external double get scale;
   external set scale(double scale);
   external int get rotation;
@@ -126,10 +127,9 @@ class PdfjsViewportParams {
   external set dontFlip(bool dontFlip);
 }
 
-@JS('PageViewport')
-class PdfjsViewport {
-  external List<double> get viewBox;
-  external set viewBox(List<double> viewBox);
+extension type PdfjsViewport(JSObject _) implements JSObject {
+  external JSArray<JSNumber> get viewBox;
+  external set viewBox(JSArray<JSNumber> viewBox);
 
   external double get scale;
   external set scale(double scale);
@@ -149,23 +149,22 @@ class PdfjsViewport {
   external double get height;
   external set height(double h);
 
-  external List<double>? get transform;
-  external set transform(List<double>? m);
+  external JSArray<JSNumber>? get transform;
+  external set transform(JSArray<JSNumber>? m);
 }
 
-@JS()
-@anonymous
-class PdfjsRenderContext {
-  external factory PdfjsRenderContext(
+extension type PdfjsRenderContext._(JSObject _) implements JSObject {
+  external PdfjsRenderContext(
       {required web.CanvasRenderingContext2D canvasContext,
       required PdfjsViewport viewport,
       String intent = 'display',
       int annotationMode = 1,
       bool renderInteractiveForms = false,
-      List<double>? transform,
-      dynamic imageLayer,
-      dynamic canvasFactory,
-      dynamic background});
+      JSArray<JSNumber>? transform,
+      JSObject imageLayer,
+      JSObject canvasFactory,
+      JSObject background});
+
   external web.CanvasRenderingContext2D get canvasContext;
   external set canvasContext(web.CanvasRenderingContext2D ctx);
   external PdfjsViewport get viewport;
@@ -181,40 +180,37 @@ class PdfjsRenderContext {
   external set annotationMode(int annotationMode);
   external bool get renderInteractiveForms;
   external set renderInteractiveForms(bool renderInteractiveForms);
-  external List<int>? get transform;
-  external set transform(List<int>? transform);
-  external dynamic get imageLayer;
-  external set imageLayer(dynamic imageLayer);
-  external dynamic get canvasFactory;
-  external set canvasFactory(dynamic canvasFactory);
-  external dynamic get background;
-  external set background(dynamic background);
+  external JSArray<JSNumber>? get transform;
+  external set transform(JSArray<JSNumber>? transform);
+  external JSObject get imageLayer;
+  external set imageLayer(JSObject imageLayer);
+  external JSObject get canvasFactory;
+  external set canvasFactory(JSObject canvasFactory);
+  external JSObject get background;
+  external set background(JSObject background);
 }
 
-@JS()
-@anonymous
-class PdfjsRender {
-  external Promise<void> get promise;
+extension type PdfjsRender._(JSObject _) implements JSObject {
+  external JSPromise get promise;
 }
 
-@JS()
-@anonymous
-class PdfjsGetTextContentParameters {
+extension type PdfjsGetTextContentParameters._(JSObject _) implements JSObject {
+  external PdfjsGetTextContentParameters({
+    bool includeMarkedContent = false,
+    bool disableNormalization = false,
+  });
+
   external bool includeMarkedContent;
   external bool disableNormalization;
 }
 
-@JS()
-@anonymous
-class PdfjsTextContent {
+extension type PdfjsTextContent._(JSObject _) implements JSObject {
   /// Either [PdfjsTextItem] or [PdfjsTextMarkedContent]
-  external List<PdfjsTextItem> get items;
-  external Object get styles;
+  external JSArray<PdfjsTextItem> get items;
+  external JSObject get styles;
 }
 
-@JS()
-@anonymous
-class PdfjsTextItem {
+extension type PdfjsTextItem._(JSObject _) implements JSObject {
   external String get str;
 
   /// Text direction: 'ttb', 'ltr' or 'rtl'.
@@ -228,46 +224,38 @@ class PdfjsTextItem {
   /// Translation is performed with [1 0 0 1 tx ty].
   /// Scaling is performed with [sx 0 0 sy 0 0].
   /// See PDF Reference 1.7, 4.2.2 Common Transformations for more.
-  external List<double> get transform;
+  external JSArray<JSNumber> get transform;
   external num get width;
   external num get height;
   external String get fontName;
   external bool get hasEOL;
 }
 
-@JS()
-@anonymous
-class PdfjsTextMarkedContent {
+extension type PdfjsTextMarkedContent._(JSObject _) implements JSObject {
   external String get type;
   external String get id;
 }
 
-@JS()
-@anonymous
-class PdfjsTextStyle {
+extension type PdfjsTextStyle._(JSObject _) implements JSObject {
   external num get ascent;
   external num get descent;
   external bool get vertical;
   external String get fontFamily;
 }
 
-@JS('BaseException')
-class PdfjsBaseException {
+extension type PdfjsBaseException._(JSObject _) implements JSObject {
   external String get message;
   external String get name;
 }
 
-@JS('PasswordException')
-class PdfjsPasswordException {
+extension type PdfjsPasswordException._(JSObject _) implements JSObject {
   external String get message;
   external String get name;
   external String get code;
 }
 
-@JS()
-@anonymous
-class PdfjsGetAnnotationsParameters {
-  external factory PdfjsGetAnnotationsParameters({
+extension type PdfjsGetAnnotationsParameters._(JSObject _) implements JSObject {
+  external PdfjsGetAnnotationsParameters({
     String intent = 'display',
   });
 
@@ -275,31 +263,25 @@ class PdfjsGetAnnotationsParameters {
   external String get intent;
 }
 
-@JS()
-@anonymous
-class PdfjsRef {
+extension type PdfjsRef._(JSObject _) implements JSObject {
   external int get num;
   external int get gen;
 }
 
-@JS()
-@anonymous
-class PdfjsAnnotationData {
+extension type PdfjsAnnotationData._(JSObject _) implements JSObject {
   external String get subtype;
   external int get annotationType;
-  external List get rect;
+  external JSArray<JSNumber> get rect;
   external String? get url;
   external String? get unsafeUrl;
   external int get annotationFlags;
-  external Object? get dest;
+  external JSObject? get dest;
 }
 
-@JS()
-@anonymous
-class PdfjsOutlineNode {
+extension type PdfjsOutlineNode._(JSObject _) implements JSObject {
   external String get title;
-  external Object? get dest;
-  external List<PdfjsOutlineNode> get items;
+  external JSAny? get dest;
+  external JSArray<PdfjsOutlineNode> get items;
 }
 
 Object _dummyJsSyncContext = {};
@@ -329,8 +311,7 @@ Future<void> _pdfjsInitialize() async {
       ..src = pdfJsSrc;
     web.document.querySelector('head')!.appendChild(script);
     await script.onLoad.first.timeout(
-        PdfJsConfiguration.configuration?.pdfJsDownloadTimeout ??
-            const Duration(seconds: 10));
+        PdfJsConfiguration.configuration?.pdfJsDownloadTimeout ?? const Duration(seconds: 10));
   } catch (e) {
     throw StateError('Failed to load pdf.js from $pdfJsSrc: $e');
   }
@@ -338,30 +319,23 @@ Future<void> _pdfjsInitialize() async {
   if (!_isPdfjsLoaded) {
     throw StateError('Failed to load pdfjs');
   }
-  _pdfjsWorkerSrc =
-      PdfJsConfiguration.configuration?.workerSrc ?? _pdfjsWorkerSrc;
+  _pdfjsWorkerSrc = PdfJsConfiguration.configuration?.workerSrc ?? _pdfjsWorkerSrc;
 
   _pdfjsInitialized = true;
 }
 
-@JS()
-@anonymous
-class ReadableStream {
-  external Promise<void> cancel();
-  external ReadableStreamDefaultReader getReader(dynamic options);
+extension type ReadableStream._(JSObject _) implements JSObject {
+  external JSPromise cancel();
+  external ReadableStreamDefaultReader getReader(JSObject options);
 }
 
-@JS()
-@anonymous
-class ReadableStreamDefaultReader {
-  external Promise<Object> cancel(Object reason);
-  external Promise<ReadableStreamChunk> read();
+extension type ReadableStreamDefaultReader._(JSObject _) implements JSObject {
+  external JSPromise<JSObject> cancel(JSObject reason);
+  external JSPromise<ReadableStreamChunk> read();
   external void releaseLock();
 }
 
-@JS()
-@anonymous
-class ReadableStreamChunk {
-  external Object get value;
+extension type ReadableStreamChunk._(JSObject _) implements JSObject {
+  external JSObject get value;
   external bool get done;
 }

@@ -545,6 +545,11 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
     } else {
       z = _coverScale!;
     }
+    // in some case, z may be 0 and it causes infinite loop.
+    if (z < 1 / 128) {
+      _zoomStops.add(1.0);
+      return;
+    }
     while (z < PdfViewerController.maxZoom) {
       _zoomStops.add(z);
       z *= 2;
@@ -965,7 +970,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
   }) {
     final page = _document!.pages[pageNumber - 1];
     final pageRect = _layout!.pageLayouts[pageNumber - 1];
-    final area = rect.toRect(page: page, scaledTo: pageRect.size);
+    final area = rect.toRect(page: page, scaledPageSize: pageRect.size);
     return area.translate(pageRect.left, pageRect.top);
   }
 

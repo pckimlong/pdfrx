@@ -1,3 +1,33 @@
+# 1.0.49
+
+- iOS minimum deployment target 12.0
+
+# 1.0.11
+
+- intl 0.18.1 (#87)
+
+# 1.0.10+1
+
+- Add note for Flutter 3.19/Dart 3.3 support on 1.0.0+
+
+# 1.0.10
+
+- FIXED: calcZoomStopTable hangs app if zoom ratio is almost 0 (#79)
+
+# 1.0.9
+
+- PdfRect.toRect: scaledTo -> scaledPageSize
+- FIXED: PdfJsConfiguration.cMapUrl/cMapPacked does not have correct default values
+
+# 1.0.8
+
+- Condition analysis warnings on auto-generated pdfium_bindings.dart
+
+# 1.0.7
+
+- Requires Flutter 3.19/Dart 3.3 again (pub.dev is upgraded to the stable🎉)
+- dart:js_interop based pdf.js interop implementation (remove dependency on package:js)
+
 # 1.0.6
 
 - Due to the pub.dev version issues, the version introduces a "temporary workaround", which downgrades several packages:

@@ -3,6 +3,12 @@
 [pdfrx](https://pub.dartlang.org/packages/pdfrx) is a rich and fast PDF viewer implementation built on the top of [pdfium](https://pdfium.googlesource.com/pdfium/).
 The plugin supports Android, iOS, Windows, macOS, Linux, and Web.
 
+> [!NOTE]
+> pdfrx 1.0.0+ supports Flutter 3.19/Dart 3.3 and could not be compatible with older Flutter/Dart versions.
+> **Please use 0.4.46+ for older projects that can not upgrade to Flutter 3.19/Dart 3.3.**
+>
+> 1.0.0+ versions receive new features and bug fixes but 0.4.46+ versions receive critical bug fixes only.
+
 ## Interactive Demo
 
 A [demo site](https://espresso3389.github.io/pdfrx/) using Flutter Web
@@ -67,7 +73,7 @@ Add this to your package's `pubspec.yaml` file and execute `flutter pub get`:
 
 ```yaml
 dependencies:
-  pdfrx: ^1.0.6
+  pdfrx: ^1.0.49
 ```
 
 ### Windows
@@ -244,7 +250,7 @@ onViewerReady: (document, controller) async {
 },
 ```
 
-[PdfOutlineNode](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfOutlineNode-class.html) is tree structured data and for more information, see the usage on [example code](https://github.com/espresso3389/pdfrx/blob/master/example/lib/outline_view.dart).
+[PdfOutlineNode](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfOutlineNode-class.html) is tree structured data and for more information, see the usage on [example code](https://github.com/espresso3389/pdfrx/blob/master/examples/viewer/lib/outline_view.dart).
 
 ### Horizontal Scroll View
 
@@ -486,4 +492,4 @@ PdfDocumentViewBuilder.asset(
 
 ## PdfDocument Management
 
-[PdfDocumentViewBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocumentViewBuilder-class.html) can accept [PdfDocumentRef](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocumentRef-class.html) from [PdfViewer](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewer-class.html) to safely share the same [PdfDocument](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocument-class.html) instance. For more information, see [example/lib/thumbnails_view.dart](example/lib/thumbnails_view.dart).
+[PdfDocumentViewBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocumentViewBuilder-class.html) can accept [PdfDocumentRef](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocumentRef-class.html) from [PdfViewer](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewer-class.html) to safely share the same [PdfDocument](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocument-class.html) instance. For more information, see [examples/viewer/lib/thumbnails_view.dart](examples/viewer/lib/thumbnails_view.dart).

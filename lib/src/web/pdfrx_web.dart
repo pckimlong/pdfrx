@@ -25,8 +25,7 @@ class PdfDocumentFactoryImpl extends PdfDocumentFactory {
           // NOTE: Moving the asset load outside the loop may cause:
           // Uncaught TypeError: Cannot perform Construct on a detached ArrayBuffer
           final bytes = await rootBundle.load(name);
-          return await pdfjsGetDocumentFromData(bytes.buffer,
-              password: password);
+          return await pdfjsGetDocumentFromData(bytes.buffer, password: password);
         },
         sourceName: 'asset:$name',
         passwordProvider: passwordProvider,
@@ -35,8 +34,7 @@ class PdfDocumentFactoryImpl extends PdfDocumentFactory {
 
   @override
   Future<PdfDocument> openCustom({
-    required FutureOr<int> Function(Uint8List buffer, int position, int size)
-        read,
+    required FutureOr<int> Function(Uint8List buffer, int position, int size) read,
     required int fileSize,
     required String sourceName,
     PdfPasswordProvider? passwordProvider,
@@ -124,8 +122,7 @@ class PdfDocumentFactoryImpl extends PdfDocumentFactory {
       } else {
         password = await passwordProvider?.call();
         if (password == null) {
-          throw const PdfPasswordException(
-              'No password supplied by PasswordProvider.');
+          throw const PdfPasswordException('No password supplied by PasswordProvider.');
         }
       }
       try {
@@ -144,8 +141,7 @@ class PdfDocumentFactoryImpl extends PdfDocumentFactory {
     }
   }
 
-  static bool _isPasswordError(dynamic e) =>
-      e.toString().startsWith('PasswordException:');
+  static bool _isPasswordError(dynamic e) => e.toString().startsWith('PasswordException:');
 }
 
 class PdfDocumentWeb extends PdfDocument {
@@ -170,15 +166,13 @@ class PdfDocumentWeb extends PdfDocument {
     required String sourceName,
     void Function()? onDispose,
   }) async {
-    final perms = (await document.getPermissions().toFuture)?.cast<int>();
+    final perms = (await document.getPermissions().toDart)?.toDart.cast<int>();
 
     final doc = PdfDocumentWeb._(
       document,
       sourceName: sourceName,
       isEncrypted: perms != null,
-      permissions: perms != null
-          ? PdfPermissions(perms.fold<int>(0, (p, e) => p | e), 2)
-          : null,
+      permissions: perms != null ? PdfPermissions(perms.fold<int>(0, (p, e) => p | e), 2) : null,
       onDispose: onDispose,
     );
     final pageCount = document.numPages;
@@ -197,7 +191,7 @@ class PdfDocumentWeb extends PdfDocument {
   }
 
   Future<PdfPage> _getPage(PdfjsDocument document, int pageNumber) async {
-    final page = await _document.getPage(pageNumber).toFuture;
+    final page = await _document.getPage(pageNumber).toDart;
     final vp1 = page.getViewport(PdfjsViewportParams(scale: 1));
     return PdfPageWeb._(
         document: this,
@@ -215,30 +209,30 @@ class PdfDocumentWeb extends PdfDocument {
   bool isIdenticalDocumentHandle(Object? other) =>
       other is PdfDocumentWeb && _document == other._document;
 
-  Future<Object?> _getDestObject(dynamic dest) async {
+  Future<JSObject?> _getDestObject(JSAny? dest) async {
     if (dest == null) return null;
     if (dest is String) {
-      return await _document.getDestination(dest).toFuture;
+      final destObj = await _document.getDestination(dest as String).toDart;
+      return destObj;
     } else {
-      return dest;
+      return dest as JSObject;
     }
   }
 
   @override
   Future<List<PdfOutlineNode>> loadOutline() async {
-    final outline = await _document.getOutline().toFuture;
+    final outline = await _document.getOutline().toDart;
     if (outline == null) return [];
     final nodes = <PdfOutlineNode>[];
-    for (final node in outline) {
+    for (final node in outline.toDart) {
       nodes.add(await _pdfOutlineNodeFromOutline(node));
     }
     return nodes;
   }
 
-  Future<PdfOutlineNode> _pdfOutlineNodeFromOutline(
-      PdfjsOutlineNode outline) async {
+  Future<PdfOutlineNode> _pdfOutlineNodeFromOutline(PdfjsOutlineNode outline) async {
     final children = <PdfOutlineNode>[];
-    for (final item in outline.items) {
+    for (final item in outline.items.toDart) {
       children.add(await _pdfOutlineNodeFromOutline(item));
     }
     return PdfOutlineNode(
@@ -248,15 +242,15 @@ class PdfDocumentWeb extends PdfDocument {
     );
   }
 
-  Future<PdfDest?> _getDestination(dynamic dest) async {
+  Future<PdfDest?> _getDestination(JSAny? dest) async {
     final destObj = await _getDestObject(dest);
-    if (destObj is! List) return null;
-    final ref = destObj[0] as PdfjsRef;
-    final cmdStr = _getName(destObj[1]);
-    final params =
-        destObj.length < 3 ? null : destObj.sublist(2).cast<double?>();
+    if (destObj is! JSArray) return null;
+    final arr = destObj.toDart;
+    final ref = arr[0] as PdfjsRef;
+    final cmdStr = _getName(arr[1]);
+    final params = arr.length < 3 ? null : arr.sublist(2).cast<double?>();
     return PdfDest(
-      await _document.getPageIndex(ref).toFuture + 1,
+      (await _document.getPageIndex(ref).toDart).toDartInt + 1,
       _parseCmdStr(cmdStr),
       params,
     );
@@ -329,8 +323,7 @@ class PdfPageWeb extends PdfPage {
         PdfAnnotationRenderingMode.annotationAndForms,
     PdfPageRenderCancellationToken? cancellationToken,
   }) async {
-    if (cancellationToken != null &&
-        cancellationToken is! PdfPageRenderCancellationTokenWeb) {
+    if (cancellationToken != null && cancellationToken is! PdfPageRenderCancellationTokenWeb) {
       throw ArgumentError(
         'cancellationToken must be created by PdfPage.createCancellationToken().',
         'cancellationToken',
@@ -382,8 +375,7 @@ class PdfPageWeb extends PdfPage {
     final vp1 = page.getViewport(PdfjsViewportParams(scale: 1));
     final pageWidth = vp1.width;
     if (width <= 0 || height <= 0) {
-      throw PdfException(
-          'Invalid PDF page rendering rectangle ($width x $height)');
+      throw PdfException('Invalid PDF page rendering rectangle ($width x $height)');
     }
 
     final vp = page.getViewport(PdfjsViewportParams(
@@ -392,8 +384,7 @@ class PdfPageWeb extends PdfPage {
         offsetY: -y.toDouble(),
         dontFlip: dontFlip));
 
-    final canvas =
-        web.document.createElement('canvas') as web.HTMLCanvasElement;
+    final canvas = web.document.createElement('canvas') as web.HTMLCanvasElement;
     canvas.width = width;
     canvas.height = height;
 
@@ -412,14 +403,9 @@ class PdfPageWeb extends PdfPage {
           ),
         )
         .promise
-        .toFuture;
+        .toDart;
 
-    final src = canvas.context2D
-        .getImageData(0, 0, width, height)
-        .data
-        .toDart
-        .buffer
-        .asUint8List();
+    final src = canvas.context2D.getImageData(0, 0, width, height).data.toDart.buffer.asUint8List();
     return src;
   }
 
@@ -428,14 +414,13 @@ class PdfPageWeb extends PdfPage {
 
   @override
   Future<List<PdfLink>> loadLinks() async {
-    final annots =
-        await page.getAnnotations(PdfjsGetAnnotationsParameters()).toFuture;
+    final annots = (await page.getAnnotations(PdfjsGetAnnotationsParameters()).toDart).toDart;
     final links = <PdfLink>[];
     for (final annot in annots) {
-      if (annot == null || annot.subtype != 'Link') {
+      if (annot.subtype != 'Link') {
         continue;
       }
-      final rect = annot.rect.cast<double>();
+      final rect = annot.rect.toDart.cast<double>();
       final rects = [
         PdfRect(rect[0], rect[3], rect[2], rect[1]),
       ];
@@ -467,8 +452,7 @@ class PdfPageRenderCancellationTokenWeb extends PdfPageRenderCancellationToken {
 }
 
 class PdfImageWeb extends PdfImage {
-  PdfImageWeb(
-      {required this.width, required this.height, required this.pixels});
+  PdfImageWeb({required this.width, required this.height, required this.pixels});
 
   @override
   final int width;
@@ -517,16 +501,18 @@ class PdfPageTextWeb extends PdfPageText {
   static Future<PdfPageTextWeb> _loadText(PdfPageWeb page) async {
     final content = await page.page
         .getTextContent(
-          PdfjsGetTextContentParameters()
-            ..includeMarkedContent = false
-            ..disableNormalization = false,
+          PdfjsGetTextContentParameters(
+            includeMarkedContent: false,
+            disableNormalization: false,
+          ),
         )
-        .toFuture;
+        .toDart;
     final sb = StringBuffer();
     final fragments = <PdfPageTextFragmentWeb>[];
-    for (final item in content.items.cast<PdfjsTextItem>()) {
-      final x = item.transform[4];
-      final y = item.transform[5];
+    for (final item in content.items.toDart) {
+      final t = item.transform.toDart.cast<double>();
+      final x = t[4];
+      final y = t[5];
       final str = item.hasEOL ? '${item.str}\n' : item.str;
       if (str == '\n' && fragments.isNotEmpty) {
         final prev = fragments.last;
@@ -561,8 +547,6 @@ class PdfPageTextWeb extends PdfPageText {
     }
 
     return PdfPageTextWeb(
-        pageNumber: page.pageNumber,
-        fullText: sb.toString(),
-        fragments: fragments);
+        pageNumber: page.pageNumber, fullText: sb.toString(), fragments: fragments);
   }
 }
