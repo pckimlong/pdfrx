@@ -28,12 +28,7 @@ const _pdfjsCMapUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$_pdfjsVers
 bool get _isPdfjsLoaded => globalContext['pdfjsLib'] != null;
 
 @JS('pdfjsLib.getDocument')
-<<<<<<< HEAD
-external _PDFDocumentLoadingTask _pdfjsGetDocument(_PdfjsGetDocumentParams data);
-=======
-external _PDFDocumentLoadingTask _pdfjsGetDocument(
-    _PdfjsDocumentInitParameters data);
->>>>>>> upstream/master
+external _PDFDocumentLoadingTask _pdfjsGetDocument(_PdfjsDocumentInitParameters data);
 
 extension type _PdfjsDocumentInitParameters._(JSObject _) implements JSObject {
   external _PdfjsDocumentInitParameters({
@@ -68,10 +63,6 @@ extension type _PDFDocumentLoadingTask(JSObject _) implements JSObject {
   external JSPromise<PdfjsDocument> get promise;
 }
 
-<<<<<<< HEAD
-Future<PdfjsDocument> pdfjsGetDocument(String url, {String? password}) => _pdfjsGetDocument(
-      _PdfjsGetDocumentParams(
-=======
 Future<PdfjsDocument> pdfjsGetDocument(
   String url, {
   String? password,
@@ -80,7 +71,6 @@ Future<PdfjsDocument> pdfjsGetDocument(
 }) =>
     _pdfjsGetDocument(
       _PdfjsDocumentInitParameters(
->>>>>>> upstream/master
         url: url,
         password: password,
         httpHeaders: headers?.jsify(),
@@ -88,8 +78,7 @@ Future<PdfjsDocument> pdfjsGetDocument(
         cMapUrl: PdfJsConfiguration.configuration?.cMapUrl ?? _pdfjsCMapUrl,
         cMapPacked: PdfJsConfiguration.configuration?.cMapPacked ?? true,
         useSystemFonts: PdfJsConfiguration.configuration?.useSystemFonts,
-        standardFontDataUrl:
-            PdfJsConfiguration.configuration?.standardFontDataUrl,
+        standardFontDataUrl: PdfJsConfiguration.configuration?.standardFontDataUrl,
       ),
     ).promise.toDart;
 
@@ -101,8 +90,7 @@ Future<PdfjsDocument> pdfjsGetDocumentFromData(ByteBuffer data, {String? passwor
         cMapUrl: PdfJsConfiguration.configuration?.cMapUrl,
         cMapPacked: PdfJsConfiguration.configuration?.cMapPacked,
         useSystemFonts: PdfJsConfiguration.configuration?.useSystemFonts,
-        standardFontDataUrl:
-            PdfJsConfiguration.configuration?.standardFontDataUrl,
+        standardFontDataUrl: PdfJsConfiguration.configuration?.standardFontDataUrl,
       ),
     ).promise.toDart;
 
