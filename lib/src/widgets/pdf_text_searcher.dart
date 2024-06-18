@@ -3,9 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-import '../pdf_api.dart';
-import '../widgets/pdf_viewer.dart';
-import '../widgets/pdf_viewer_params.dart';
+import '../../pdfrx.dart';
 
 /// Helper class to interactively search text in a PDF document.
 ///
@@ -228,6 +226,7 @@ class PdfTextSearcher extends Listenable {
       ),
       margin: 50,
     );
+    controller?.setCurrentPageNumber(match.pageNumber);
     controller?.invalidate();
   }
 
@@ -256,6 +255,11 @@ class PdfTextSearcher extends Listenable {
     final range = getMatchesRangeForPage(page.pageNumber);
     if (range == null) return;
 
+    final matchTextColor =
+        controller?.params.matchTextColor ?? Colors.yellow.withOpacity(0.5);
+    final activeMatchTextColor = controller?.params.activeMatchTextColor ??
+        Colors.orange.withOpacity(0.5);
+
     for (int i = range.start; i < range.end; i++) {
       final m = _matches[i];
       final rect = m.bounds
@@ -264,8 +268,12 @@ class PdfTextSearcher extends Listenable {
       canvas.drawRect(
         rect,
         Paint()
+<<<<<<< HEAD
           ..color =
               m == _currentMatch ? Colors.orange.withOpacity(0.5) : Colors.yellow.withOpacity(0.5),
+=======
+          ..color = m == _currentMatch ? activeMatchTextColor : matchTextColor,
+>>>>>>> upstream/master
       );
     }
   }

@@ -4,7 +4,7 @@
 library pdf.js;
 
 import 'dart:js_interop';
-import 'dart:js_util';
+import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
 import 'package:synchronized/extension.dart';
@@ -25,25 +25,40 @@ const _pdfjsWorkerSrc =
 /// Default CMap URL
 const _pdfjsCMapUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$_pdfjsVersion/cmaps/';
 
-bool get _isPdfjsLoaded => hasProperty(globalThis, 'pdfjsLib');
+bool get _isPdfjsLoaded => globalContext['pdfjsLib'] != null;
 
 @JS('pdfjsLib.getDocument')
+<<<<<<< HEAD
 external _PDFDocumentLoadingTask _pdfjsGetDocument(_PdfjsGetDocumentParams data);
+=======
+external _PDFDocumentLoadingTask _pdfjsGetDocument(
+    _PdfjsDocumentInitParameters data);
+>>>>>>> upstream/master
 
-extension type _PdfjsGetDocumentParams._(JSObject _) implements JSObject {
-  external _PdfjsGetDocumentParams({
+extension type _PdfjsDocumentInitParameters._(JSObject _) implements JSObject {
+  external _PdfjsDocumentInitParameters({
     String? url,
     JSArrayBuffer? data,
+    JSAny? httpHeaders,
+    bool? withCredentials,
     String? password,
+    int? length,
     String? cMapUrl,
     bool? cMapPacked,
+    bool? useSystemFonts,
+    String? standardFontDataUrl,
   });
 
   external String? get url;
   external JSArrayBuffer? get data;
+  external JSAny? get httpHeaders;
+  external bool? get withCredentials;
   external String? get password;
+  external int? get length;
   external String? get cMapUrl;
   external bool? get cMapPacked;
+  external bool? get useSystemFonts;
+  external String? get standardFontDataUrl;
 }
 
 @JS('pdfjsLib.GlobalWorkerOptions.workerSrc')
@@ -53,22 +68,41 @@ extension type _PDFDocumentLoadingTask(JSObject _) implements JSObject {
   external JSPromise<PdfjsDocument> get promise;
 }
 
+<<<<<<< HEAD
 Future<PdfjsDocument> pdfjsGetDocument(String url, {String? password}) => _pdfjsGetDocument(
       _PdfjsGetDocumentParams(
+=======
+Future<PdfjsDocument> pdfjsGetDocument(
+  String url, {
+  String? password,
+  Map<String, String>? headers,
+  bool withCredentials = false,
+}) =>
+    _pdfjsGetDocument(
+      _PdfjsDocumentInitParameters(
+>>>>>>> upstream/master
         url: url,
         password: password,
+        httpHeaders: headers?.jsify(),
+        withCredentials: withCredentials,
         cMapUrl: PdfJsConfiguration.configuration?.cMapUrl ?? _pdfjsCMapUrl,
         cMapPacked: PdfJsConfiguration.configuration?.cMapPacked ?? true,
+        useSystemFonts: PdfJsConfiguration.configuration?.useSystemFonts,
+        standardFontDataUrl:
+            PdfJsConfiguration.configuration?.standardFontDataUrl,
       ),
     ).promise.toDart;
 
 Future<PdfjsDocument> pdfjsGetDocumentFromData(ByteBuffer data, {String? password}) =>
     _pdfjsGetDocument(
-      _PdfjsGetDocumentParams(
+      _PdfjsDocumentInitParameters(
         data: data.toJS,
         password: password,
         cMapUrl: PdfJsConfiguration.configuration?.cMapUrl,
         cMapPacked: PdfJsConfiguration.configuration?.cMapPacked,
+        useSystemFonts: PdfJsConfiguration.configuration?.useSystemFonts,
+        standardFontDataUrl:
+            PdfJsConfiguration.configuration?.standardFontDataUrl,
       ),
     ).promise.toDart;
 
@@ -108,12 +142,13 @@ extension type PdfjsAnnotation._(JSObject _) implements JSObject {
 }
 
 extension type PdfjsViewportParams._(JSObject _) implements JSObject {
-  external PdfjsViewportParams(
-      {double scale,
-      int rotation, // 0, 90, 180, 270
-      double offsetX = 0,
-      double offsetY = 0,
-      bool dontFlip = false});
+  external PdfjsViewportParams({
+    double scale,
+    int rotation, // 0, 90, 180, 270
+    double offsetX,
+    double offsetY,
+    bool dontFlip,
+  });
 
   external double get scale;
   external set scale(double scale);
@@ -154,16 +189,17 @@ extension type PdfjsViewport(JSObject _) implements JSObject {
 }
 
 extension type PdfjsRenderContext._(JSObject _) implements JSObject {
-  external PdfjsRenderContext(
-      {required web.CanvasRenderingContext2D canvasContext,
-      required PdfjsViewport viewport,
-      String intent = 'display',
-      int annotationMode = 1,
-      bool renderInteractiveForms = false,
-      JSArray<JSNumber>? transform,
-      JSObject imageLayer,
-      JSObject canvasFactory,
-      JSObject background});
+  external PdfjsRenderContext({
+    required web.CanvasRenderingContext2D canvasContext,
+    required PdfjsViewport viewport,
+    String intent,
+    int annotationMode,
+    bool renderInteractiveForms,
+    JSArray<JSNumber>? transform,
+    JSObject imageLayer,
+    JSObject canvasFactory,
+    JSObject background,
+  });
 
   external web.CanvasRenderingContext2D get canvasContext;
   external set canvasContext(web.CanvasRenderingContext2D ctx);
@@ -196,8 +232,8 @@ extension type PdfjsRender._(JSObject _) implements JSObject {
 
 extension type PdfjsGetTextContentParameters._(JSObject _) implements JSObject {
   external PdfjsGetTextContentParameters({
-    bool includeMarkedContent = false,
-    bool disableNormalization = false,
+    bool includeMarkedContent,
+    bool disableNormalization,
   });
 
   external bool includeMarkedContent;
@@ -213,16 +249,18 @@ extension type PdfjsTextContent._(JSObject _) implements JSObject {
 extension type PdfjsTextItem._(JSObject _) implements JSObject {
   external String get str;
 
-  /// Text direction: 'ttb', 'ltr' or 'rtl'.
+  /// Text direction: `ttb`, `ltr` or `rtl`.
   external String get dir;
 
   /// Matrix for transformation, in the form [a b c d e f], equivalent to:
+  /// ```
   /// | a  b  0 |
   /// | c  d  0 |
   /// | e  f  1 |
+  /// ```
   ///
-  /// Translation is performed with [1 0 0 1 tx ty].
-  /// Scaling is performed with [sx 0 0 sy 0 0].
+  /// Translation is performed with `[1 0 0 1 tx ty]`.
+  /// Scaling is performed with `[sx 0 0 sy 0 0]`.
   /// See PDF Reference 1.7, 4.2.2 Common Transformations for more.
   external JSArray<JSNumber> get transform;
   external num get width;
@@ -255,11 +293,9 @@ extension type PdfjsPasswordException._(JSObject _) implements JSObject {
 }
 
 extension type PdfjsGetAnnotationsParameters._(JSObject _) implements JSObject {
-  external PdfjsGetAnnotationsParameters({
-    String intent = 'display',
-  });
+  external PdfjsGetAnnotationsParameters({String intent});
 
-  /// 'display' or 'print' or, 'any'
+  /// `display` or `print` or, `any`
   external String get intent;
 }
 

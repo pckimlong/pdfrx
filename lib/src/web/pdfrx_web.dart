@@ -3,7 +3,6 @@
 
 import 'dart:async';
 import 'dart:js_interop';
-import 'dart:js_util' as js_util;
 import 'dart:ui';
 
 import 'package:flutter/services.dart';
@@ -81,17 +80,16 @@ class PdfDocumentFactoryImpl extends PdfDocumentFactory {
     String filePath, {
     PdfPasswordProvider? passwordProvider,
     bool firstAttemptByEmptyPassword = true,
-  }) async {
-    return _openByFunc(
-      (password) => pdfjsGetDocument(
-        filePath,
-        password: password,
-      ),
-      sourceName: filePath,
-      passwordProvider: passwordProvider,
-      firstAttemptByEmptyPassword: firstAttemptByEmptyPassword,
-    );
-  }
+  }) =>
+      _openByFunc(
+        (password) => pdfjsGetDocument(
+          filePath,
+          password: password,
+        ),
+        sourceName: filePath,
+        passwordProvider: passwordProvider,
+        firstAttemptByEmptyPassword: firstAttemptByEmptyPassword,
+      );
 
   @override
   Future<PdfDocument> openUri(
@@ -101,9 +99,15 @@ class PdfDocumentFactoryImpl extends PdfDocumentFactory {
     PdfDownloadProgressCallback? progressCallback,
     PdfDownloadReportCallback? reportCallback,
     bool preferRangeAccess = false,
+    Map<String, String>? headers,
   }) =>
-      openFile(
-        uri.toString(),
+      _openByFunc(
+        (password) => pdfjsGetDocument(
+          uri.toString(),
+          password: password,
+          headers: headers,
+        ),
+        sourceName: uri.toString(),
         passwordProvider: passwordProvider,
         firstAttemptByEmptyPassword: firstAttemptByEmptyPassword,
       );
@@ -279,8 +283,8 @@ class PdfDocumentWeb extends PdfDocument {
     }
   }
 
-  static String _getName(dynamic name) {
-    final obj = js_util.dartify(name);
+  static String _getName(JSAny? name) {
+    final obj = name.dartify();
     if (obj is Map) {
       return obj['name'].toString();
     } else {
@@ -448,6 +452,7 @@ class PdfPageRenderCancellationTokenWeb extends PdfPageRenderCancellationToken {
   @override
   void cancel() => _canceled = true;
 
+  @override
   bool get isCanceled => _canceled;
 }
 

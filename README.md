@@ -47,11 +47,15 @@ A [demo site](https://espresso3389.github.io/pdfrx/) using Flutter Web
   - pdfium bindings
     - Not encouraged but you can import [package:pdfrx/src/pdfium/pdfium_bindings.dart](https://github.com/espresso3389/pdfrx/blob/master/lib/src/pdfium/pdfium_bindings.dart)
 
-## Getting Started
+## Example Code
 
 The following fragment illustrates the easiest way to show a PDF file in assets:
 
 ```dart
+import 'package:pdfrx/pdfrx.dart';
+
+...
+
 class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
@@ -67,13 +71,17 @@ class _MyAppState extends State<MyApp> {
 }
 ```
 
+Anyway, please follow the instructions below to install on your environment.
+
+## Getting Started
+
 ## Installation
 
 Add this to your package's `pubspec.yaml` file and execute `flutter pub get`:
 
 ```yaml
 dependencies:
-  pdfrx: ^1.0.49
+  pdfrx: ^1.0.69
 ```
 
 ### Windows
@@ -101,14 +109,14 @@ PdfJsConfiguration.configuration = const PdfJsConfiguration(
 
 Please note that pdf.js 4.X is not supported yet and use 3.X versions.
 
-## macOS
+### macOS
 
 For macOS, Flutter app restrict its capability by enabling [App Sandbox](https://developer.apple.com/documentation/security/app_sandbox) by default. You can change the behavior by editing your app's entitlements files depending on your configuration. See [the discussion below](#deal-with-app-sandbox).
 
 - [`macos/Runner/Release.entitlements`](https://github.com/espresso3389/flutter_pdf_render/blob/master/example/macos/Runner/Release.entitlements)
 - [`macos/Runner/DebugProfile.entitlements`](https://github.com/espresso3389/flutter_pdf_render/blob/master/example/macos/Runner/DebugProfile.entitlements)
 
-### Deal with App Sandbox
+#### Deal with App Sandbox
 
 The easiest option to access files on your disk, set [`com.apple.security.app-sandbox`](https://developer.apple.com/documentation/bundleresources/entitlements/com_apple_security_app-sandbox) to false on your entitlements file though it is not recommended for releasing apps because it completely disables [App Sandbox](https://developer.apple.com/documentation/security/app_sandbox).
 
@@ -215,21 +223,31 @@ To enable Link in PDF file, you should set [PdfViewerParams.linkWidgetBuilder](h
 The following fragment creates a widget that handles user's tap on link:
 
 ```dart
-linkWidgetBuilder: (context, link, size) => Material(
-  color: Colors.transparent,
-  child: InkWell(
-    onTap: () {
-      // handle URL or Dest
-      if (link.url != null) {
-        // TODO: implement your own isSecureUrl by yourself...
-        if (await isSecureUrl(link.url!)) {
-          launchUrl(link.url!);
+linkWidgetBuilder: (context, link, size) => MouseRegion(
+  cursor: SystemMouseCursors.click,
+  hitTestBehavior: HitTestBehavior.translucent,
+  GestureDetector(
+    behavior: HitTestBehavior.translucent,
+    child: InkWell(
+      onTap: () {
+        // handle URL or Dest
+        if (link.url != null) {
+          // TODO: implement your own isSecureUrl by yourself...
+          if (await isSecureUrl(link.url!)) {
+            launchUrl(link.url!);
+          }
+        } else if (link.dest != null) {
+          controller.goToDest(link.dest);
         }
-      } else if (link.dest != null) {
-        controller.goToDest(link.dest);
-      }
-    },
-    hoverColor: Colors.blue.withOpacity(0.2),
+      },
+      child: IgnorePointer(
+        child: Container(
+          color: Colors.blue.withOpacity(0.2),
+          width: size.width,
+          height: size.height,
+        ),
+      ),
+    ),
   ),
 ),
 ```
@@ -250,7 +268,7 @@ onViewerReady: (document, controller) async {
 },
 ```
 
-[PdfOutlineNode](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfOutlineNode-class.html) is tree structured data and for more information, see the usage on [example code](https://github.com/espresso3389/pdfrx/blob/master/examples/viewer/lib/outline_view.dart).
+[PdfOutlineNode](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfOutlineNode-class.html) is tree structured data and for more information, see the usage on [example code](https://github.com/espresso3389/pdfrx/blob/master/example/viewer/lib/outline_view.dart).
 
 ### Horizontal Scroll View
 
@@ -278,6 +296,61 @@ layoutPages: (pages, params) {
   return PdfPageLayout(
     pageLayouts: pageLayouts,
     documentSize: Size(x, height),
+  );
+},
+```
+
+### Facing Pages
+
+The following code will show pages in "facing-sequential-layout" that is often used in PDF viewer apps:
+
+```dart
+/// Page reading order; true to L-to-R that is commonly used by books like manga or such
+var isRightToLeftReadingOrder = false;
+/// Use the first page as cover page
+var needCoverPage = true;
+
+...
+
+layoutPages: (pages, params) {
+  final width = pages.fold(
+      0.0, (prev, page) => max(prev, page.width));
+
+  final pageLayouts = <Rect>[];
+  final offset = needCoverPage ? 1 : 0;
+  double y = params.margin;
+  for (int i = 0; i < pages.length; i++) {
+    final page = pages[i];
+    final pos = i + offset;
+    final isLeft = isRightToLeftReadingOrder
+        ? (pos & 1) == 1
+        : (pos & 1) == 0;
+
+    final otherSide = (pos ^ 1) - offset;
+    final h = 0 <= otherSide && otherSide < pages.length
+        ? max(page.height, pages[otherSide].height)
+        : page.height;
+
+    pageLayouts.add(
+      Rect.fromLTWH(
+        isLeft
+            ? width + params.margin - page.width
+            : params.margin * 2 + width,
+        y + (h - page.height) / 2,
+        page.width,
+        page.height,
+      ),
+    );
+    if (pos & 1 == 1 || i + 1 == pages.length) {
+      y += h + params.margin;
+    }
+  }
+  return PdfPageLayout(
+    pageLayouts: pageLayouts,
+    documentSize: Size(
+      (params.margin + width) * 2 + params.margin,
+      y,
+    ),
   );
 },
 ```
@@ -492,4 +565,4 @@ PdfDocumentViewBuilder.asset(
 
 ## PdfDocument Management
 
-[PdfDocumentViewBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocumentViewBuilder-class.html) can accept [PdfDocumentRef](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocumentRef-class.html) from [PdfViewer](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewer-class.html) to safely share the same [PdfDocument](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocument-class.html) instance. For more information, see [examples/viewer/lib/thumbnails_view.dart](examples/viewer/lib/thumbnails_view.dart).
+[PdfDocumentViewBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocumentViewBuilder-class.html) can accept [PdfDocumentRef](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocumentRef-class.html) from [PdfViewer](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewer-class.html) to safely share the same [PdfDocument](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocument-class.html) instance. For more information, see [example/viewer/lib/thumbnails_view.dart](example/viewer/lib/thumbnails_view.dart).

@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../pdfrx.dart';
+import '../utils/double_extensions.dart';
 
 /// A widget that displays selectable text on a page.
 ///
@@ -61,27 +62,25 @@ class _PdfPageTextOverlayState extends State<PdfPageTextOverlay> {
     widget.onTextSelectionChange?.call(ranges);
   }
 
-  bool _almostIdenticalY(double a, double b) {
-    return (a - b).abs() < .25;
-  }
-
   Future<void> _initText() async {
     _release();
     final pageText = _pageText = await widget.page.loadText();
     final fragments = <PdfPageTextFragment>[];
-    double y = pageText.fragments[0].bounds.bottom;
-    int start = 0;
-    for (int i = 1; i < pageText.fragments.length; i++) {
-      final fragment = pageText.fragments[i];
-      if (!_almostIdenticalY(fragment.bounds.bottom, y)) {
-        fragments.addAll(pageText.fragments.sublist(start, i));
-        y = fragment.bounds.bottom;
-        start = i;
+    if (pageText.fragments.isNotEmpty) {
+      double y = pageText.fragments[0].bounds.bottom;
+      int start = 0;
+      for (int i = 1; i < pageText.fragments.length; i++) {
+        final fragment = pageText.fragments[i];
+        if (!fragment.bounds.bottom.isAlmostIdentical(y, error: .25)) {
+          fragments.addAll(pageText.fragments.sublist(start, i));
+          y = fragment.bounds.bottom;
+          start = i;
+        }
       }
-    }
-    if (start < pageText.fragments.length) {
-      fragments
-          .addAll(pageText.fragments.sublist(start, pageText.fragments.length));
+      if (start < pageText.fragments.length) {
+        fragments.addAll(
+            pageText.fragments.sublist(start, pageText.fragments.length));
+      }
     }
     this.fragments = fragments;
     if (mounted) {
@@ -538,6 +537,9 @@ class _PdfTextRenderBox extends RenderBox with Selectable, SelectionRegistrant {
           }
           _start = newOffset;
         }
+      // FIXME: #156/#157 handle new SelectionEventType.selectParagraph (currently only in master channel)
+      default: // case SelectionEventType.selectParagraph:
+        _start = _end = null;
     }
     _updateGeometry();
     return result;

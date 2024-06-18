@@ -5,8 +5,8 @@ if [ "$2" = "" ]; then
   exit 1
 fi
 
-# https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/6150
-LAST_KNOWN_GOOD_COMMIT=1e9d89db3c00fd1eab2959bd063832bebe6b868d
+# https://pdfium.googlesource.com/pdfium/+/refs/heads/chromium/6517
+LAST_KNOWN_GOOD_COMMIT=a80a8cbfdf7fa64adb743a9ca203124785656ca3
 
 SCRIPT_DIR=$(cd $(dirname $0) && pwd)
 

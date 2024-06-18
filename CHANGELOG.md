@@ -1,3 +1,108 @@
+# 1.0.69
+
+- FIXED: Small Page Size PDF Not Scaling to Fit Screen (#174)
+
+# 1.0.68
+
+- Introduces PdfViewerController.setCurrentPageNumber (#152)
+- BREAKING CHANGE: Current page number behavior change (#152)
+- BREAKING CHANGE: PdfPageAnchor behavior changes for existing PdfPageAnchor enumeration values.
+- Introduces PdfPageAnchor.top/left/right/bottom
+- Introduces PdfViewerController.calcMatrixToEnsureRectVisible
+
+# 1.0.67
+
+- FIXED: LateInitializationError: Field '\_cacheBlockCount@1436474497' has not been initialized (#167)
+
+# 1.0.66
+
+- FIXED: PdfException: Failed to load PDF document (FPDF_GetLastError=3) (#166)
+- Add explicit HTTP error handling code (to show the error detail)
+- bblanchon/pdfium-binaries 127.0.6517.0 (chromium/6517) (iOS/macOS is still using 6406)
+
+# 1.0.65
+
+- Remove dependency to intl (#151)
+
+# 1.0.64
+
+- Android: minSdkVersion to 21 (related #158)
+
+# 1.0.63
+
+- Workaround for SelectionEventType.selectParagraph that is introduced in master (#156/PR #157)
+  - The code uses `default` to handle the case but we should update it with the "right" code when it is introduced to the stable
+
+# 1.0.62
+
+- iOS/macOS also uses bblanchon/pdfium-binaries 125.0.6406.0 (chromium/6406)
+- Additional fix for [#147](https://github.com/espresso3389/pdfrx/issues/147)
+- Additional implementation for [#132](https://github.com/espresso3389/pdfrx/issues/132)
+
+# 1.0.61
+
+- Introduces PdfViewerParams.pageDropShadow
+- Introduces PdfViewerParams.pageBackgroundPaintCallbacks
+
+# 1.0.60
+
+- bblanchon/pdfium-binaries 125.0.6406.0 (chromium/6406)
+  - default_min_sdk_version=21 to support lower API level devices ([#145](https://github.com/espresso3389/pdfrx/issues/145))
+
+# 1.0.59
+
+- Fixes concurrency issue on PdfDocument dispose (#143)
+- FIXED: Null check operator used on \_guessCurrentPage ([#147](https://github.com/espresso3389/pdfrx/issues/147))
+
+# 1.0.58
+
+- Any API calls that wraps pdfium are now completely synchronized. They are run in an app-wide single worker isolate
+  - This is because pdfium does not support any kind of concurrency and even different PdfDocument instances could not be called concurrently
+
+# 1.0.57
+
+- FIXED: possible double-dispose on race condition (#136)
+- Add mechanism to cancel partial real size rendering (#137)
+- WIP: Custom HTTP header for downloading PDF files (#132)
+- Text search match color customization (#142)
+
+# 1.0.56
+
+- Reduce total number of Isolates used when opening PDF documents
+- Add PdfViewerParams.calculateCurrentPageNumber
+- FIXED: Could not handle certain destination coordinates correctly (#135)
+
+# 1.0.55
+
+- Improve memory consumption by opening/closing page handle every time pdfrx need it (PR #125)
+
+# 1.0.54
+
+- Improves [End] button behavior to reach the actual end of document rather than the top of the last page
+  - PdfViewerParams.pageAnchorEnd for specifying anchor for the "virtual" page next to the last page
+- PdfViewerParams.onePassRenderingScaleThreshold to specify maximum scale that is rendered in single rendering call
+  - If a page is scaled over the threshold scale, the page is once rendered in the threshold scale and after a some delay, the real scaled image is rendered partially that fits in the view port
+- PdfViewerParams.perPageSelectionAreaInjector is introduced to customize text selection behavior
+
+# 1.0.53
+
+- Fixes flicker on scrolling/zooming that was introduced on 1.0.52
+- Revival of high resolution partial rendering
+
+# 1.0.52
+
+- Fixes memory consumption control issues (Related: #121)
+
+# 1.0.51
+
+- FIXED: memory leak on \_PdfPageViewState (#110)
+- Remove dependency on dart:js_util (#109)
+- FIXED: Crash on \_PdfViewerScrollThumbState (#86)
+
+# 1.0.50
+
+- Introduces PdfViewerParams.useAlternativeFitScaleAsMinScale but it's not recommended to set the value to false because it may degrade the viewer performance
+
 # 1.0.49
 
 - iOS minimum deployment target 12.0
