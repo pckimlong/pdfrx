@@ -98,6 +98,7 @@ class PdfViewer extends StatefulWidget {
   /// [initialPageNumber] is the page number to show initially.
   /// [preferRangeAccess] to prefer range access to download the PDF. The default is false.
   /// [headers] is used to specify additional HTTP headers especially for authentication/authorization.
+  /// [withCredentials] is used to specify whether to include credentials in the request (Only supported on Web).
   PdfViewer.uri(
     Uri uri, {
     PdfPasswordProvider? passwordProvider,
@@ -108,12 +109,14 @@ class PdfViewer extends StatefulWidget {
     this.initialPageNumber = 1,
     bool preferRangeAccess = false,
     Map<String, String>? headers,
+    bool withCredentials = false,
   }) : documentRef = PdfDocumentRefUri(
           uri,
           passwordProvider: passwordProvider,
           firstAttemptByEmptyPassword: firstAttemptByEmptyPassword,
           preferRangeAccess: preferRangeAccess,
           headers: headers,
+          withCredentials: withCredentials,
         );
 
   /// Create [PdfViewer] from a byte data.
@@ -213,6 +216,8 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
   final _cancellationTokens = <int, List<PdfPageRenderCancellationToken>>{};
   final _pageImagePartialRenderingRequests = <int, _PdfPartialImageRenderingRequest>{};
 
+  late final _canvasLinkPainter = _CanvasLinkPainter(this);
+
   // Changes to the stream rebuilds the viewer
   final _updateStream = BehaviorSubject<Matrix4>();
 
@@ -288,6 +293,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
     _layout = null;
 
     _releaseAllImages();
+    _canvasLinkPainter.resetAll();
     _pageNumber = null;
     _initialized = false;
     _txController.removeListener(_onMatrixChanged);
@@ -330,6 +336,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
     _animController.dispose();
     widget.documentRef.resolveListenable().removeListener(_onDocumentChanged);
     _releaseAllImages();
+    _canvasLinkPainter.resetAll();
     _txController.removeListener(_onMatrixChanged);
     _controller?._attach(null);
     _txController.dispose();
@@ -361,7 +368,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
       );
     }
     return LayoutBuilder(builder: (context, constraints) {
-      if (_calcViewSizeAndCoverScale(Size(constraints.maxWidth, constraints.maxHeight))) {
+      if (_updateViewSizeAndCoverScale(Size(constraints.maxWidth, constraints.maxHeight))) {
         if (_initialized) {
           Future.microtask(
             () {
@@ -417,6 +424,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
                       onInteractionUpdate: widget.params.onInteractionUpdate,
                       interactionEndFrictionCoefficient:
                           widget.params.interactionEndFrictionCoefficient,
+                      onWheelDelta: widget.params.scrollByMouseWheel != null ? _onWheelDelta : null,
                       // PDF pages
                       child: CustomPaint(
                         foregroundPainter: _CustomPainter.fromFunction(_customPaint),
@@ -424,8 +432,14 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
                       ),
                     ),
                     ..._buildPageOverlayWidgets(),
+                    if (_canvasLinkPainter.isEnabled)
+                      _canvasLinkPainter.linkHandlingOverlay(_viewSize!),
                     if (widget.params.viewerOverlayBuilder != null)
-                      ...widget.params.viewerOverlayBuilder!(context, _viewSize!)
+                      ...widget.params.viewerOverlayBuilder!(
+                        context,
+                        _viewSize!,
+                        _canvasLinkPainter._handleLinkTap,
+                      ),
                   ],
                 );
               }),
@@ -505,12 +519,20 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
     _txController.value = m;
   }
 
-  bool _calcViewSizeAndCoverScale(Size viewSize) {
+  bool _updateViewSizeAndCoverScale(Size viewSize) {
     if (_viewSize != viewSize) {
+      final oldSize = _viewSize;
       _viewSize = viewSize;
       final s1 = viewSize.width / _layout!.documentSize.width;
       final s2 = viewSize.height / _layout!.documentSize.height;
       _coverScale = max(s1, s2);
+      if (_controller != null && widget.params.onViewSizeChanged != null) {
+        widget.params.onViewSizeChanged!(
+          viewSize,
+          oldSize,
+          _controller!,
+        );
+      }
       return true;
     }
     return false;
@@ -687,7 +709,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
       final page = _document!.pages[i];
       final rectExternal = _documentToRenderBox(rect, renderBox);
       if (rectExternal != null) {
-        if (widget.params.linkWidgetBuilder != null) {
+        if (widget.params.linkHandlerParams == null && widget.params.linkWidgetBuilder != null) {
           linkWidgets.add(
             PdfPageLinksOverlay(
               key: Key('pageLinks:${page.pageNumber}'),
@@ -752,6 +774,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
     }
     return [
       Listener(
+        behavior: HitTestBehavior.translucent,
         // FIXME: Workaround for Web; Web absorbs wheel events.
         onPointerSignal: kIsWeb
             ? (event) {
@@ -890,6 +913,10 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
         );
       }
 
+      if (_canvasLinkPainter.isEnabled) {
+        _canvasLinkPainter.paintLinkHighlights(canvas, rect, page);
+      }
+
       if (widget.params.pagePaintCallbacks != null) {
         for (final callback in widget.params.pagePaintCallbacks!) {
           callback(canvas, rect, page);
@@ -911,6 +938,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
   }
 
   void _relayoutPages() {
+    if (_document == null) return;
     _layout = (widget.params.layoutPages ?? _layoutPages)(_document!.pages, widget.params);
   }
 
@@ -1079,7 +1107,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
 
   /// Restrict matrix to the safe range.
   Matrix4 _makeMatrixInSafeRange(Matrix4 newValue) {
-    _calcViewSizeAndCoverScale(_viewSize!);
+    _updateViewSizeAndCoverScale(_viewSize!);
 
     final position = newValue.calcPosition(_viewSize!);
 
@@ -1091,12 +1119,17 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
     final x = position.dx.range(hw, _layout!.documentSize.width - hw);
     final y = position.dy.range(hh, _layout!.documentSize.height - hh);
 
-    return _calcMatrixFor(Offset(x, y), zoom: newZoom);
+    return _calcMatrixFor(Offset(x, y), zoom: newZoom, viewSize: _viewSize!);
   }
 
-  Matrix4 _calcMatrixFor(Offset position, {required double zoom}) {
-    final hw = _viewSize!.width / 2;
-    final hh = _viewSize!.height / 2;
+  /// Calculate matrix to center the specified position.
+  Matrix4 _calcMatrixFor(
+    Offset position, {
+    required double zoom,
+    required Size viewSize,
+  }) {
+    final hw = viewSize.width / 2;
+    final hh = viewSize.height / 2;
 
     return Matrix4.compose(
         vec.Vector3(
@@ -1116,7 +1149,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
     var zoom = min((_viewSize!.width - margin * 2) / rect.width,
         (_viewSize!.height - margin * 2) / rect.height);
     if (zoomMax != null && zoom > zoomMax) zoom = zoomMax;
-    return _calcMatrixFor(rect.center, zoom: zoom);
+    return _calcMatrixFor(rect.center, zoom: zoom, viewSize: _viewSize!);
   }
 
   Matrix4 _calcMatrixForArea({
@@ -1203,8 +1236,10 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
           final hw = _viewSize!.width / 2 / zoom;
           final hh = _viewSize!.height / 2 / zoom;
           return _calcMatrixFor(
-              pageRect.topLeft.translate(calcX(params[0]) + hw, calcY(params[1]) + hh),
-              zoom: zoom);
+            pageRect.topLeft.translate(calcX(params[0]) + hw, calcY(params[1]) + hh),
+            zoom: zoom,
+            viewSize: _viewSize!,
+          );
         }
         break;
       case PdfDestCommand.fit:
@@ -1218,6 +1253,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
           return _calcMatrixFor(
             pageRect.topLeft.translate(0, calcY(params[0]) + hh),
             zoom: _currentZoom,
+            viewSize: _viewSize!,
           );
         }
         break;
@@ -1228,6 +1264,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
           return _calcMatrixFor(
             pageRect.topLeft.translate(calcX(params[0]) + hw, 0),
             zoom: _currentZoom,
+            viewSize: _viewSize!,
           );
         }
         break;
@@ -1302,7 +1339,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
       final newRect = intRect.inflate(margin / _currentZoom);
       return _calcMatrixForRect(newRect);
     }
-    return _calcMatrixForRect(rect);
+    return _calcMatrixForRect(rect, margin: margin);
   }
 
   Future<void> _ensureVisible(
@@ -1311,7 +1348,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
     double margin = 0,
   }) =>
       _goTo(
-        _calcMatrixToEnsureRectVisible(rect),
+        _calcMatrixToEnsureRectVisible(rect, margin: margin),
         duration: duration,
       );
 
@@ -1379,6 +1416,32 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
 
   double get _currentZoom => _txController.value.zoom;
 
+  PdfPageHitTestResult? _getPdfPageHitTestResult(
+    Offset offset, {
+    required bool useDocumentLayoutCoordinates,
+  }) {
+    final pages = _document?.pages;
+    final pageLayouts = _layout?.pageLayouts;
+    if (pages == null || pageLayouts == null) return null;
+    if (!useDocumentLayoutCoordinates) {
+      final r = Matrix4.inverted(_txController.value);
+      offset = r.transformOffset(offset);
+    }
+    for (int i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final pageRect = pageLayouts[i];
+      if (pageRect.contains(offset)) {
+        return PdfPageHitTestResult(
+          page: page,
+          offset: Offset(offset.dx - pageRect.left, pageRect.bottom - offset.dy) *
+              page.height /
+              pageRect.height,
+        );
+      }
+    }
+    return null;
+  }
+
   double _getNextZoom({bool loop = true}) =>
       _findNextZoomStop(_currentZoom, zoomUp: true, loop: loop);
   double _getPreviousZoom({bool loop = true}) =>
@@ -1388,7 +1451,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
     Offset position,
     double zoom,
   ) =>
-      _goTo(_calcMatrixFor(position, zoom: zoom));
+      _goTo(_calcMatrixFor(position, zoom: zoom, viewSize: _viewSize!));
 
   Offset get _centerPosition => _txController.value.calcPosition(_viewSize!);
 
@@ -1483,6 +1546,17 @@ class PdfPageLayout {
   final Size documentSize;
 }
 
+/// Represents the result of the hit test on the page.
+class PdfPageHitTestResult {
+  PdfPageHitTestResult({required this.page, required this.offset});
+
+  /// The page that was hit.
+  final PdfPage page;
+
+  /// The offset in the PDF page coordinates; the origin is at the bottom-left corner.
+  final Offset offset;
+}
+
 /// Controls associated [PdfViewer].
 ///
 /// It's always your option to extend (inherit) the class to customize the [PdfViewer] behavior.
@@ -1520,6 +1594,9 @@ class PdfViewerController extends ValueListenable<Matrix4> {
   /// The document layout size.
   Size get documentSize => _state._layout!.documentSize;
 
+  /// Page layout.
+  PdfPageLayout get layout => _state._layout!;
+
   /// The view port size (The widget's client area's size)
   Size get viewSize => _state._viewSize!;
 
@@ -1536,16 +1613,58 @@ class PdfViewerController extends ValueListenable<Matrix4> {
   Rect get visibleRect => _state._visibleRect;
 
   /// Get the associated document.
+  ///
+  /// Please note that the field does not ensure that the [PdfDocument] is alive during long asynchronous operations.
+  /// If you want to do some time consuming asynchronous operation, use [useDocument] instead.
+  @Deprecated('Use useDocument instead')
   PdfDocument get document => _state._document!;
 
   /// Get the associated pages.
+  ///
+  /// Please note that the field does not ensure that the associated [PdfDocument] is alive during long asynchronous
+  /// operations. If you want to do some time consuming asynchronous operation, use [useDocument] instead.
+  /// For page count, use [pageCount] instead.
+  @Deprecated('Use useDocument instead')
   List<PdfPage> get pages => _state._document!.pages;
+
+  /// Get the page count of the document.
+  int get pageCount => _state._document!.pages.length;
 
   /// The current page number if available.
   int? get pageNumber => _state._pageNumber;
 
   /// The document reference associated to the [PdfViewer].
   PdfDocumentRef get documentRef => _state.widget.documentRef;
+
+  /// Within call to the function, it ensures that the [PdfDocument] is alive (not null and not disposed).
+  ///
+  /// If [ensureLoaded] is true, it tries to ensure that the document is loaded.
+  /// If the document is not loaded, the function does not call [task] and return null.
+  /// [cancelLoading] is used to cancel the loading process.
+  ///
+  /// The following fragment explains how to use [PdfDocument]:
+  ///
+  /// ```dart
+  /// await controller.useDocument(
+  ///   (document) async {
+  ///     // Use the document here
+  ///   },
+  /// );
+  /// ```
+  ///
+  /// This is just a shortcut for the combination of [PdfDocumentRef.resolveListenable] and [PdfDocumentListenable.useDocument].
+  ///
+  /// For more information, see [PdfDocumentRef], [PdfDocumentRef.resolveListenable], and [PdfDocumentListenable.useDocument].
+  FutureOr<T?> useDocument<T>(
+    FutureOr<T> Function(PdfDocument document) task, {
+    bool ensureLoaded = true,
+    Completer? cancelLoading,
+  }) =>
+      documentRef.resolveListenable().useDocument(
+            task,
+            ensureLoaded: ensureLoaded,
+            cancelLoading: cancelLoading,
+          );
 
   @override
   Matrix4 get value => _state._txController.value;
@@ -1715,8 +1834,17 @@ class PdfViewerController extends ValueListenable<Matrix4> {
   }) =>
       _state._ensureVisible(rect, duration: duration, margin: margin);
 
-  Matrix4 calcMatrixFor(Offset position, {double? zoom}) =>
-      _state._calcMatrixFor(position, zoom: zoom ?? currentZoom);
+  /// Calculate the matrix to center the specified position.
+  Matrix4 calcMatrixFor(
+    Offset position, {
+    double? zoom,
+    Size? viewSize,
+  }) =>
+      _state._calcMatrixFor(
+        position,
+        zoom: zoom ?? currentZoom,
+        viewSize: viewSize ?? this.viewSize,
+      );
 
   Offset get centerPosition => value.calcPosition(viewSize);
 
@@ -1728,6 +1856,19 @@ class PdfViewerController extends ValueListenable<Matrix4> {
     double margin = 0,
   }) =>
       _state._calcMatrixToEnsureRectVisible(rect, margin: margin);
+
+  /// Do hit-test against laid out pages.
+  ///
+  /// Returns the hit-test result if the specified offset is inside a page; otherwise null.
+  ///
+  /// [useDocumentLayoutCoordinates] specifies whether the offset is in the document layout coordinates;
+  /// if true, the offset is in the document layout coordinates; otherwise, the offset is in the widget coordinates.
+  PdfPageHitTestResult? getPdfPageHitTestResult(
+    Offset offset, {
+    required bool useDocumentLayoutCoordinates,
+  }) =>
+      _state._getPdfPageHitTestResult(offset,
+          useDocumentLayoutCoordinates: useDocumentLayoutCoordinates);
 
   /// Set the current page number.
   ///
@@ -1802,13 +1943,32 @@ extension PdfMatrix4Ext on Matrix4 {
 
   set y(double value) => yZoomed = value * zoom;
 
+  /// Calculate the position of the matrix based on the specified view size.
+  ///
+  /// Because [Matrix4] does not have the information of the view size,
+  /// this function calculates the position based on the specified view size.
   Offset calcPosition(Size viewSize) =>
       Offset((viewSize.width / 2 - xZoomed), (viewSize.height / 2 - yZoomed)) / zoom;
 
+  /// Calculate the visible rectangle based on the specified view size.
+  ///
+  /// [margin] adds extra margin to the area.
+  /// Because [Matrix4] does not have the information of the view size,
+  /// this function calculates the visible rectangle based on the specified view size.
   Rect calcVisibleRect(Size viewSize, {double margin = 0}) => Rect.fromCenter(
       center: calcPosition(viewSize),
       width: (viewSize.width - margin * 2) / zoom,
       height: (viewSize.height - margin * 2) / zoom);
+
+  Offset transformOffset(Offset xy) {
+    final x = xy.dx;
+    final y = xy.dy;
+    final w = x * storage[3] + y * storage[7] + storage[15];
+    return Offset(
+      (x * storage[0] + y * storage[4] + storage[12]) / w,
+      (x * storage[1] + y * storage[5] + storage[13]) / w,
+    );
+  }
 }
 
 extension _RangeDouble<T extends num> on T {
@@ -1856,4 +2016,126 @@ Widget _defaultErrorBannerBuilder(
     error,
     stackTrace: stackTrace,
   );
+}
+
+/// Handles the link painting and tap handling.
+class _CanvasLinkPainter {
+  _CanvasLinkPainter(this._state);
+  final _PdfViewerState _state;
+  MouseCursor _cursor = MouseCursor.defer;
+  final _links = <int, List<PdfLink>>{};
+
+  bool get isEnabled => _state.widget.params.linkHandlerParams != null;
+
+  /// Reset all the internal data.
+  void resetAll() {
+    _cursor = MouseCursor.defer;
+    _links.clear();
+  }
+
+  /// Release the page data.
+  void releaseLinksForPage(int pageNumber) {
+    _links.remove(pageNumber);
+  }
+
+  List<PdfLink>? _ensureLinksLoaded(PdfPage page, {void Function()? onLoaded}) {
+    final links = _links[page.pageNumber];
+    if (links != null) return links;
+    synchronized(() async {
+      final links = _links[page.pageNumber];
+      if (links != null) return links;
+      _links[page.pageNumber] = await page.loadLinks(compact: true);
+      if (onLoaded != null) {
+        onLoaded();
+      } else {
+        _state._invalidate();
+      }
+    });
+    return null;
+  }
+
+  PdfLink? _findLinkAtPosition(Offset position) {
+    final hitResult = _state._getPdfPageHitTestResult(
+      position,
+      useDocumentLayoutCoordinates: false,
+    );
+    if (hitResult == null) return null;
+    final links = _ensureLinksLoaded(hitResult.page);
+    if (links == null) return null;
+    for (final link in links) {
+      for (final rect in link.rects) {
+        if (rect.containsOffset(hitResult.offset)) {
+          return link;
+        }
+      }
+    }
+    return null;
+  }
+
+  bool _handleLinkTap(Offset tapPosition) {
+    _cursor = MouseCursor.defer;
+    final link = _findLinkAtPosition(tapPosition);
+    if (link == null) return false;
+    final onLinkTap = _state.widget.params.linkHandlerParams?.onLinkTap;
+    if (onLinkTap != null) {
+      onLinkTap(link);
+      return true;
+    }
+    return false;
+  }
+
+  void _handleLinkMouseCursor(Offset position, void Function(void Function()) setState) {
+    final link = _findLinkAtPosition(position);
+    final newCursor = link == null ? MouseCursor.defer : SystemMouseCursors.click;
+    if (newCursor != _cursor) {
+      _cursor = newCursor;
+      setState(() {});
+    }
+  }
+
+  /// Creates a [GestureDetector] for handling link taps and mouse cursor.
+  Widget linkHandlingOverlay(Size size) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      // link taps
+      onTapUp: (details) => _handleLinkTap(details.localPosition),
+      child: StatefulBuilder(builder: (context, setState) {
+        return MouseRegion(
+          hitTestBehavior: HitTestBehavior.translucent,
+          onHover: (event) => _handleLinkMouseCursor(event.localPosition, setState),
+          onExit: (event) {
+            _cursor = MouseCursor.defer;
+            setState(() {});
+          },
+          cursor: _cursor,
+          child: IgnorePointer(
+            child: SizedBox(width: size.width, height: size.height),
+          ),
+        );
+      }),
+    );
+  }
+
+  /// Paints the link highlights.
+  void paintLinkHighlights(Canvas canvas, Rect pageRect, PdfPage page) {
+    final links = _ensureLinksLoaded(page);
+    if (links == null) return;
+
+    final customPainter = _state.widget.params.linkHandlerParams?.customPainter;
+
+    if (customPainter != null) {
+      customPainter.call(canvas, pageRect, page, links);
+      return;
+    }
+
+    final paint = Paint()
+      ..color = _state.widget.params.linkHandlerParams?.linkColor ?? Colors.blue.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+    for (final link in links) {
+      for (final rect in link.rects) {
+        final rectLink = rect.toRectInPageRect(page: page, pageRect: pageRect);
+        canvas.drawRect(rectLink, paint);
+      }
+    }
+  }
 }

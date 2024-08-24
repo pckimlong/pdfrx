@@ -43,6 +43,7 @@ class PdfViewerParams {
     this.calculateInitialPageNumber,
     this.calculateCurrentPageNumber,
     this.onViewerReady,
+    this.onViewSizeChanged,
     this.onPageChanged,
     this.getPageRenderingScale,
     this.scrollByMouseWheel = 0.2,
@@ -51,6 +52,7 @@ class PdfViewerParams {
     this.maxImageBytesCachedOnMemory = 100 * 1024 * 1024,
     this.horizontalCacheExtent = 1.0,
     this.verticalCacheExtent = 1.0,
+    this.linkHandlerParams,
     this.viewerOverlayBuilder,
     this.pageOverlaysBuilder,
     this.loadingBannerBuilder,
@@ -143,7 +145,7 @@ class PdfViewerParams {
   /// faster and looks better to the user. However, larger value may consume more memory.
   /// So you may want to set the smaller value to reduce memory consumption.
   ///
-  /// The default is 200 / 72, which implies rendering at 300 dpi.
+  /// The default is 200 / 72, which implies rendering at 200 dpi.
   /// If you want more granular control for each page, use [getPageRenderingScale].
   final double onePassRenderingScaleThreshold;
 
@@ -208,6 +210,34 @@ class PdfViewerParams {
   ///
   /// Unlike [PdfViewerDocumentChangedCallback], this function is called after the viewer is ready to interact.
   final PdfViewerReadyCallback? onViewerReady;
+
+  /// Function to be notified when the viewer size is changed.
+  ///
+  /// Please note that the function might be called during widget build,
+  /// so you should not synchronously call functions that may cause rebuild;
+  /// instead, you can use [Future.microtask] or [Future.delayed] to schedule the function call after the build.
+  ///
+  /// The following code illustrates how to keep the center position during device screen rotation:
+  ///
+  /// ```dart
+  /// onViewSizeChanged: (viewSize, oldViewSize, controller) {
+  ///   if (oldViewSize != null) {
+  ///   // The most important thing here is that the transformation matrix
+  ///   // is not changed on the view change.
+  ///   final centerPosition =
+  ///       controller.value.calcPosition(oldViewSize);
+  ///   final newMatrix =
+  ///       controller.calcMatrixFor(centerPosition);
+  ///   // Don't change the matrix in sync; the callback might be called
+  ///   // during widget-tree's build process.
+  ///   Future.delayed(
+  ///     const Duration(milliseconds: 200),
+  ///     () => controller.goTo(newMatrix),
+  ///   );
+  ///   }
+  /// },
+  /// ```
+  final PdfViewerViewSizeChanged? onViewSizeChanged;
 
   /// Function to calculate the initial page number.
   ///
@@ -278,6 +308,11 @@ class PdfViewerParams {
   /// The vertical cache extent specified in ratio to the viewport height. The default is 1.0.
   final double verticalCacheExtent;
 
+  /// Parameters for the built-in link handler.
+  ///
+  /// It is mutually exclusive with [linkWidgetBuilder].
+  final PdfLinkHandlerParams? linkHandlerParams;
+
   /// Add overlays to the viewer.
   ///
   /// This function is to generate widgets on PDF viewer's overlay [Stack].
@@ -285,8 +320,9 @@ class PdfViewerParams {
   ///
   /// The most typical use case is to add scroll thumbs to the viewer.
   /// The following fragment illustrates how to add vertical and horizontal scroll thumbs:
+  ///
   /// ```dart
-  /// viewerOverlayBuilder: (context, size) => [
+  /// viewerOverlayBuilder: (context, size, handleLinkTap) => [
   ///   PdfViewerScrollThumb(
   ///       controller: controller,
   ///       orientation: ScrollbarOrientation.right),
@@ -297,6 +333,30 @@ class PdfViewerParams {
   /// ```
   ///
   /// For more information, see [PdfViewerScrollThumb].
+  ///
+  /// ### Note for using [GestureDetector] inside [viewerOverlayBuilder]:
+  /// You may want to use [GestureDetector] inside [viewerOverlayBuilder] to handle certain gesture events.
+  /// In such cases, your [GestureDetector] eats the gestures and the viewer cannot handle them directly.
+  /// So, when you use [GestureDetector] inside [viewerOverlayBuilder], please ensure the following things:
+  ///
+  /// - [GestureDetector.behavior] should be [HitTestBehavior.translucent]
+  /// - [GestureDetector.onTapUp] (or such depending on your situation) should call `handleLinkTap` to handle link tap
+  ///
+  /// The following fragment illustrates how to handle link tap in [GestureDetector]:
+  /// ```dart
+  /// viewerOverlayBuilder: (context, size, handleLinkTap) => [
+  ///   GestureDetector(
+  ///     behavior: HitTestBehavior.translucent,
+  ///     onTapUp: (details) => handleLinkTap(details.localPosition),
+  ///     // Make the GestureDetector covers all the viewer widget's area
+  ///     // but also make the event go through to the viewer.
+  ///     child: IgnorePointer(child: SizedBox(width: size.width, height: size.height)),
+  ///     ...
+  ///   ),
+  ///   ...
+  /// ]
+  /// ```
+  ///
   final PdfViewerOverlaysBuilder? viewerOverlayBuilder;
 
   /// Add overlays to each page.
@@ -338,6 +398,8 @@ class PdfViewerParams {
   final PdfViewerErrorBannerBuilder? errorBannerBuilder;
 
   /// Build link widget.
+  ///
+  /// If [linkHandlerParams] is specified, it is ignored.
   final PdfLinkWidgetBuilder? linkWidgetBuilder;
 
   /// Callback to paint over the rendered page.
@@ -415,7 +477,8 @@ class PdfViewerParams {
         other.enableKeyboardNavigation != enableKeyboardNavigation ||
         other.scrollByArrowKey != scrollByArrowKey ||
         other.horizontalCacheExtent != horizontalCacheExtent ||
-        other.verticalCacheExtent != verticalCacheExtent;
+        other.verticalCacheExtent != verticalCacheExtent ||
+        other.linkHandlerParams != linkHandlerParams;
   }
 
   @override
@@ -450,6 +513,7 @@ class PdfViewerParams {
         other.calculateInitialPageNumber == calculateInitialPageNumber &&
         other.calculateCurrentPageNumber == calculateCurrentPageNumber &&
         other.onViewerReady == onViewerReady &&
+        other.onViewSizeChanged == onViewSizeChanged &&
         other.onPageChanged == onPageChanged &&
         other.getPageRenderingScale == getPageRenderingScale &&
         other.scrollByMouseWheel == scrollByMouseWheel &&
@@ -457,6 +521,7 @@ class PdfViewerParams {
         other.scrollByArrowKey == scrollByArrowKey &&
         other.horizontalCacheExtent == horizontalCacheExtent &&
         other.verticalCacheExtent == verticalCacheExtent &&
+        other.linkHandlerParams == linkHandlerParams &&
         other.viewerOverlayBuilder == viewerOverlayBuilder &&
         other.pageOverlaysBuilder == pageOverlaysBuilder &&
         other.loadingBannerBuilder == loadingBannerBuilder &&
@@ -496,6 +561,7 @@ class PdfViewerParams {
         calculateInitialPageNumber.hashCode ^
         calculateCurrentPageNumber.hashCode ^
         onViewerReady.hashCode ^
+        onViewSizeChanged.hashCode ^
         onPageChanged.hashCode ^
         getPageRenderingScale.hashCode ^
         scrollByMouseWheel.hashCode ^
@@ -503,6 +569,7 @@ class PdfViewerParams {
         scrollByArrowKey.hashCode ^
         horizontalCacheExtent.hashCode ^
         verticalCacheExtent.hashCode ^
+        linkHandlerParams.hashCode ^
         viewerOverlayBuilder.hashCode ^
         pageOverlaysBuilder.hashCode ^
         loadingBannerBuilder.hashCode ^
@@ -541,6 +608,16 @@ typedef PdfViewerReadyCallback = void Function(
   PdfViewerController controller,
 );
 
+/// Function to be called when the viewer view size is changed.
+///
+/// [viewSize] is the new view size.
+/// [oldViewSize] is the previous view size.
+typedef PdfViewerViewSizeChanged = void Function(
+  Size viewSize,
+  Size? oldViewSize,
+  PdfViewerController controller,
+);
+
 /// Function called when the current page is changed.
 typedef PdfPageChangedCallback = void Function(int? pageNumber);
 
@@ -570,8 +647,19 @@ typedef PdfPageLayoutFunction = PdfPageLayout Function(
 /// Function to build viewer overlays.
 ///
 /// [size] is the size of the viewer widget.
+/// [handleLinkTap] is a function to handle link tap. For more details, see [PdfViewerParams.viewerOverlayBuilder].
 typedef PdfViewerOverlaysBuilder = List<Widget> Function(
-    BuildContext context, Size size);
+  BuildContext context,
+  Size size,
+  PdfViewerHandleLinkTap handleLinkTap,
+);
+
+/// Function to handle link tap.
+///
+/// The function returns true if it processes the link on the specified position; otherwise, returns false.
+/// [position] is the position of the tap in the viewer;
+/// typically it is [GestureDetector.onTapUp]'s [TapUpDetails.localPosition].
+typedef PdfViewerHandleLinkTap = bool Function(Offset position);
 
 /// Function to build page overlays.
 ///
@@ -640,10 +728,17 @@ typedef PerPageSelectionAreaInjector = Widget Function(
 /// And the anchor determines which part of the page should be shown in the viewer when [PdfViewerController.goToPage]
 /// is called.
 ///
-/// If you prefer to show the top of the page, [PdfPageAnchor.top] will do that.
+/// If you prefer to show the top of the page, [top] will do that.
 ///
 /// If you prefer to show whole the page even if the page will be zoomed down to fit into the viewer,
-/// [PdfPageAnchor.all] will do that.
+/// [all] will do that.
+///
+/// Basically, [top], [left], [right], [bottom] anchors are used to make page edge line of that side visible inside
+/// the view area.
+///
+/// [topLeft], [topCenter], [topRight], [centerLeft], [center], [centerRight], [bottomLeft], [bottomCenter],
+/// and [bottomRight] are used to make the "point" visible inside the view area.
+///
 enum PdfPageAnchor {
   top,
   left,
@@ -660,3 +755,55 @@ enum PdfPageAnchor {
   bottomRight,
   all,
 }
+
+/// Parameters for the built-in link handler.
+class PdfLinkHandlerParams {
+  const PdfLinkHandlerParams({
+    required this.onLinkTap,
+    this.linkColor,
+    this.customPainter,
+  });
+
+  /// Function to be called when the link is tapped.
+  ///
+  /// The functions should return true if it processes the link; otherwise, it should return false.
+  final void Function(PdfLink link) onLinkTap;
+
+  /// Color for the link. If null, the default color is `Colors.blue.withOpacity(0.2)`.
+  final Color? linkColor;
+
+  /// Custom link painter for the page.
+  ///
+  /// The custom painter completely overrides the default link painter.
+  /// The following fragment is an example to draw a red rectangle on the link area:
+  ///
+  /// ```dart
+  /// customPainter: (canvas, pageRect, page, links) {
+  ///   final paint = Paint()
+  ///     ..color = Colors.red.withOpacity(0.2)
+  ///     ..style = PaintingStyle.fill;
+  ///   for (final link in links) {
+  ///     final rect = link.rect.toRectInPageRect(page: page, pageRect: pageRect);
+  ///     canvas.drawRect(rect, paint);
+  ///   }
+  /// }
+  /// ```
+  final PdfLinkCustomPagePainter? customPainter;
+
+  @override
+  bool operator ==(covariant PdfLinkHandlerParams other) {
+    if (identical(this, other)) return true;
+
+    return other.onLinkTap == onLinkTap &&
+        other.linkColor == linkColor &&
+        other.customPainter == customPainter;
+  }
+
+  @override
+  int get hashCode {
+    return onLinkTap.hashCode ^ linkColor.hashCode ^ customPainter.hashCode;
+  }
+}
+
+typedef PdfLinkCustomPagePainter = void Function(
+    ui.Canvas canvas, Rect pageRect, PdfPage page, List<PdfLink> links);

@@ -1,3 +1,72 @@
+# 1.0.82
+
+- collection/rxdart dependency workaround (#211)
+
+# 1.0.81
+
+- Introduces PdfViewerController.useDocument to make it easy to use PdfDocument safely
+- Introduces PdfViewerController.pageCount to get page count without explicitly access PdfViewerController.pages
+- PdfViewerController.document/PdfViewerController.pages are now deprecated
+
+# 1.0.80
+
+- BREAKING CHANGE: PdfViewerParams.viewerOverlayBuilder introduces third parameter named handleLinkTap, which is used with GestureDetector to handle link-tap events on user code (#175)
+- Fix typos on README.md
+
+# 1.0.79
+
+- FIXED: RangeError on PdfViewer.uri when missing "Expires" header (#206)
+
+# 1.0.78
+
+- Add packagingOptions pickFirst to workaround multiple libpdfium.so problem on Android build (#8)
+- FIXED: \_relayoutPages may cause null access
+- Update README.md to explain PdfViewerParam.linkHandlerParams for link handling
+
+# 1.0.77
+
+- #175: Woops, just missing synchronized to call loadLinks causes multiple load invocations...
+
+# 1.0.76
+
+- Add several tweaks to reduce PdfLink's memory footprint (Related: #175)
+- Introduces PdfViewerParam.linkHandlerParams and PdfLinkHandlerParams to show/handle PDF links without using Flutter Widgets (#175)
+
+# 1.0.75
+
+- PDF.js 4.4.168
+
+# 1.0.74
+
+- Introduces PdfViewerController.getPdfPageHitTestResult
+- Introduces PdfViewerController.layout to get page layout
+
+# 1.0.73
+
+- Introduces PdfViewerParams.onViewSizeChanged, which is called on view size change
+  - The feature can be used to keep the screen center on device screen rotation (#194)
+
+# 1.0.72
+
+- FIXED: Example code is not compilable
+- FIXED: Marker could not be placed correctly on the example code (#189)
+- FIXED: Updated podspec file not to download the same archive again and again (#154)
+- Introduces chromium/6555 for all platforms
+  - Darwin uses pdfium-apple-v9 (chromium/6555)
+  - ~~Improves memory consumption by pdfium's internal caching feature (#184)~~
+
+# 1.0.71
+
+- Introduces withCredentials for Web to download PDF file using current session credentials (Cookie) (#182)
+- FIXED: Re-download logic error that causes 416 on certain web site (#183)
+
+# 1.0.70
+
+- PdfViewer calls re-layout logic on every zoom ratio changes (#131)
+- Add PdfViewerParams.interactionEndFrictionCoefficient (#176)
+- Minor fix for downloading cache
+- rxdart gets back to 0.27.7 because 0.28.0 causes incompatibility with several other plugins...
+
 # 1.0.69
 
 - FIXED: Small Page Size PDF Not Scaling to Fit Screen (#174)
@@ -56,8 +125,8 @@
 
 # 1.0.58
 
-- Any API calls that wraps pdfium are now completely synchronized. They are run in an app-wide single worker isolate
-  - This is because pdfium does not support any kind of concurrency and even different PdfDocument instances could not be called concurrently
+- Any API calls that wraps PDFium are now completely synchronized. They are run in an app-wide single worker isolate
+  - This is because PDFium does not support any kind of concurrency and even different PdfDocument instances could not be called concurrently
 
 # 1.0.57
 
@@ -293,7 +362,7 @@ _NOTE: On pub.dev, 1.0.0+ versions gets [[ANALYSIS ISSUE]](https://pub.dev/packa
 ## 0.4.18
 
 - PdfDocumentProvider supercedes PdfDocumentStore (PR #42)
-- pdfium 6259 for Windows, Linux, and Android
+- PDFium 6259 for Windows, Linux, and Android
 - FIXED: Bug: Tests fail due to null operator check on PdfViewerController #44
 
 ## 0.4.17

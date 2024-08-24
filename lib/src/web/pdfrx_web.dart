@@ -6,7 +6,6 @@ import 'dart:js_interop';
 import 'dart:ui';
 
 import 'package:flutter/services.dart';
-import 'package:synchronized/extension.dart';
 import 'package:web/web.dart' as web;
 
 import '../../pdfrx.dart';
@@ -100,12 +99,14 @@ class PdfDocumentFactoryImpl extends PdfDocumentFactory {
     PdfDownloadReportCallback? reportCallback,
     bool preferRangeAccess = false,
     Map<String, String>? headers,
+    bool withCredentials = false,
   }) =>
       _openByFunc(
         (password) => pdfjsGetDocument(
           uri.toString(),
           password: password,
           headers: headers,
+          withCredentials: withCredentials,
         ),
         sourceName: uri.toString(),
         passwordProvider: passwordProvider,
@@ -246,13 +247,15 @@ class PdfDocumentWeb extends PdfDocument {
     );
   }
 
+  /// NOTE: The returned [PdfDest] is always compacted.
   Future<PdfDest?> _getDestination(JSAny? dest) async {
     final destObj = await _getDestObject(dest);
     if (destObj is! JSArray) return null;
     final arr = destObj.toDart;
     final ref = arr[0] as PdfjsRef;
     final cmdStr = _getName(arr[1]);
-    final params = arr.length < 3 ? null : arr.sublist(2).cast<double?>();
+    final params =
+        arr.length < 3 ? null : List<double?>.unmodifiable(arr.sublist(2).cast<double?>());
     return PdfDest(
       (await _document.getPageIndex(ref).toDart).toDartInt + 1,
       _parseCmdStr(cmdStr),
@@ -337,28 +340,23 @@ class PdfPageWeb extends PdfPage {
     fullHeight ??= this.height;
     width ??= fullWidth.toInt();
     height ??= fullHeight.toInt();
-    return await synchronized(() async {
-      if (cancellationToken is PdfPageRenderCancellationTokenWeb &&
-          cancellationToken.isCanceled == true) {
-        return null;
-      }
-      final data = await _renderRaw(
+
+    return PdfImageWeb(
+      width: width,
+      height: height,
+      pixels: await _renderRaw(
         x,
         y,
-        width!,
-        height!,
-        fullWidth!,
-        fullHeight!,
+        width,
+        height,
+        fullWidth,
+        fullHeight,
         backgroundColor,
         false,
         annotationRenderingMode,
-      );
-      return PdfImageWeb(
-        width: width,
-        height: height,
-        pixels: data,
-      );
-    });
+        cancellationToken as PdfPageRenderCancellationTokenWeb,
+      ),
+    );
   }
 
   @override
@@ -375,6 +373,7 @@ class PdfPageWeb extends PdfPage {
     Color? backgroundColor,
     bool dontFlip,
     PdfAnnotationRenderingMode annotationRenderingMode,
+    PdfPageRenderCancellationTokenWeb cancellationToken,
   ) async {
     final vp1 = page.getViewport(PdfjsViewportParams(scale: 1));
     final pageWidth = vp1.width;
@@ -409,15 +408,14 @@ class PdfPageWeb extends PdfPage {
         .promise
         .toDart;
 
-    final src = canvas.context2D.getImageData(0, 0, width, height).data.toDart.buffer.asUint8List();
-    return src;
+    return canvas.context2D.getImageData(0, 0, width, height).data.toDart.buffer.asUint8List();
   }
 
   @override
   Future<PdfPageText> loadText() => PdfPageTextWeb._loadText(this);
 
   @override
-  Future<List<PdfLink>> loadLinks() async {
+  Future<List<PdfLink>> loadLinks({bool compact = false}) async {
     final annots = (await page.getAnnotations(PdfjsGetAnnotationsParameters()).toDart).toDart;
     final links = <PdfLink>[];
     for (final annot in annots) {
@@ -425,9 +423,7 @@ class PdfPageWeb extends PdfPage {
         continue;
       }
       final rect = annot.rect.toDart.cast<double>();
-      final rects = [
-        PdfRect(rect[0], rect[3], rect[2], rect[1]),
-      ];
+      final rects = List<PdfRect>.unmodifiable([PdfRect(rect[0], rect[3], rect[2], rect[1])]);
       if (annot.url != null) {
         links.add(
           PdfLink(rects, url: Uri.parse(annot.url!)),
@@ -442,8 +438,7 @@ class PdfPageWeb extends PdfPage {
         continue;
       }
     }
-
-    return links;
+    return compact ? List.unmodifiable(links) : links;
   }
 }
 

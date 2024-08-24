@@ -1,13 +1,7 @@
 # pdfrx
 
-[pdfrx](https://pub.dartlang.org/packages/pdfrx) is a rich and fast PDF viewer implementation built on the top of [pdfium](https://pdfium.googlesource.com/pdfium/).
+[pdfrx](https://pub.dartlang.org/packages/pdfrx) is a rich and fast PDF viewer implementation built on the top of [PDFium](https://pdfium.googlesource.com/pdfium/).
 The plugin supports Android, iOS, Windows, macOS, Linux, and Web.
-
-> [!NOTE]
-> pdfrx 1.0.0+ supports Flutter 3.19/Dart 3.3 and could not be compatible with older Flutter/Dart versions.
-> **Please use 0.4.46+ for older projects that can not upgrade to Flutter 3.19/Dart 3.3.**
->
-> 1.0.0+ versions receive new features and bug fixes but 0.4.46+ versions receive critical bug fixes only.
 
 ## Interactive Demo
 
@@ -44,7 +38,7 @@ A [demo site](https://espresso3389.github.io/pdfrx/) using Flutter Web
     - [PdfPageView](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfPageView-class.html)
   - Easy to use PDF APIs
     - [PdfDocument](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfDocument-class.html)
-  - pdfium bindings
+  - PDFium bindings
     - Not encouraged but you can import [package:pdfrx/src/pdfium/pdfium_bindings.dart](https://github.com/espresso3389/pdfrx/blob/master/lib/src/pdfium/pdfium_bindings.dart)
 
 ## Example Code
@@ -81,58 +75,15 @@ Add this to your package's `pubspec.yaml` file and execute `flutter pub get`:
 
 ```yaml
 dependencies:
-  pdfrx: ^1.0.69
+  pdfrx: ^1.0.82
 ```
 
-### Windows
+### Note for Windows
 
-- Ensure your Windows installation enables _Developer Mode_
+Ensure your Windows installation enables _Developer Mode_.
 
-  The build process internally uses symblic link and it requires Developer Mode to be enabled.
-  Without this, you may encounter errors [like this](https://github.com/espresso3389/pdfrx/issues/34).
-
-### Web
-
-[pdf.js](https://mozilla.github.io/pdf.js/) is now automatically loaded and no modification to `index.html` is required.
-
-It's not required but you can customize download URLs for pdf.js by setting [PdfJsConfiguration.configuration](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfJsConfiguration/configuration.html):
-
-```dart
-// place the code on main function or somewhere that is executed before the actual
-// app code.
-PdfJsConfiguration.configuration = const PdfJsConfiguration(
-  pdfJsSrc: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.mjs',
-  workerSrc: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
-  cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-);
-```
-
-Please note that pdf.js 4.X is not supported yet and use 3.X versions.
-
-### macOS
-
-For macOS, Flutter app restrict its capability by enabling [App Sandbox](https://developer.apple.com/documentation/security/app_sandbox) by default. You can change the behavior by editing your app's entitlements files depending on your configuration. See [the discussion below](#deal-with-app-sandbox).
-
-- [`macos/Runner/Release.entitlements`](https://github.com/espresso3389/flutter_pdf_render/blob/master/example/macos/Runner/Release.entitlements)
-- [`macos/Runner/DebugProfile.entitlements`](https://github.com/espresso3389/flutter_pdf_render/blob/master/example/macos/Runner/DebugProfile.entitlements)
-
-#### Deal with App Sandbox
-
-The easiest option to access files on your disk, set [`com.apple.security.app-sandbox`](https://developer.apple.com/documentation/bundleresources/entitlements/com_apple_security_app-sandbox) to false on your entitlements file though it is not recommended for releasing apps because it completely disables [App Sandbox](https://developer.apple.com/documentation/security/app_sandbox).
-
-Another option is to use [`com.apple.security.files.user-selected.read-only`](https://developer.apple.com/documentation/bundleresources/entitlements/com_apple_security_files_user-selected_read-only) along with [file_selector_macos](https://pub.dev/packages/file_selector_macos). The option is better in security than the previous option.
-
-Anyway, the example code for the plugin illustrates how to download and preview internet hosted PDF file. It uses
-[`com.apple.security.network.client`](https://developer.apple.com/documentation/bundleresources/entitlements/com_apple_security_network_client) along with [flutter_cache_manager](https://pub.dev/packages/flutter_cache_manager):
-
-```xml
-<dict>
-  <key>com.apple.security.app-sandbox</key>
-  <true/>
-  <key>com.apple.security.network.client</key>
-  <true/>
-</dict>
-```
+The build process internally uses symbolic link and it requires Developer Mode to be enabled.
+Without this, you may encounter errors [like this](https://github.com/espresso3389/pdfrx/issues/34).
 
 ## Open PDF File
 
@@ -142,9 +93,11 @@ Anyway, the example code for the plugin illustrates how to download and preview 
   - Open PDF of Flutter's asset
 - [PdfViewer.file](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewer/PdfViewer.file.html)
   - Open PDF from file
+    - macOS: may be blocked by [App Sandbox](https://github.com/espresso3389/pdfrx/wiki/macOS:-Deal-with-App-Sandbox)
 - [PdfViewer.uri](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewer/PdfViewer.uri.html)
   - Open PDF from URI (`https://...` or relative path)
-  - On Flutter Web, it may be _blocked by [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)_
+    - Flutter Web: may be blocked by [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
+    - macOS: may be blocked by [App Sandbox](https://github.com/espresso3389/pdfrx/wiki/macOS:-Deal-with-App-Sandbox)
 
 ### Deal with Password Protected PDF Files
 
@@ -216,45 +169,59 @@ PdfViewer.asset(
 ),
 ```
 
+There are still several limitations and issues on text selection feature:
+
+- Pan-to-scroll does not work on Desktop ([#8](https://github.com/espresso3389/pdfrx/issues/8))
+- Pan-to-scroll does not work on Flutter Web on mobile devices ([#180](https://github.com/espresso3389/pdfrx/issues/180))
+- Selecting text sometimes throws exception ([#185](https://github.com/espresso3389/pdfrx/issues/185))
+  - Text selection suddenly gets cleared in certain situation
+
 ### PDF Link Handling
 
-To enable Link in PDF file, you should set [PdfViewerParams.linkWidgetBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerParams/linkWidgetBuilder.html).
+To enable Link in PDF file, you should set [PdfViewerParams.linkHandlerParams](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerParams/linkHandlerParams.html).
 
-The following fragment creates a widget that handles user's tap on link:
+The following fragment handles user's tap on link:
 
 ```dart
-linkWidgetBuilder: (context, link, size) => MouseRegion(
-  cursor: SystemMouseCursors.click,
-  hitTestBehavior: HitTestBehavior.translucent,
-  GestureDetector(
-    behavior: HitTestBehavior.translucent,
-    child: InkWell(
-      onTap: () {
-        // handle URL or Dest
-        if (link.url != null) {
-          // TODO: implement your own isSecureUrl by yourself...
-          if (await isSecureUrl(link.url!)) {
-            launchUrl(link.url!);
-          }
-        } else if (link.dest != null) {
-          controller.goToDest(link.dest);
-        }
-      },
-      child: IgnorePointer(
-        child: Container(
-          color: Colors.blue.withOpacity(0.2),
-          width: size.width,
-          height: size.height,
-        ),
-      ),
-    ),
-  ),
+linkHandlerParams: PdfLinkHandlerParams(
+  onLinkTap: (link) {
+    // handle URL or Dest
+    if (link.url != null) {
+      // TODO: implement your own isSecureUrl by yourself...
+      if (await isSecureUrl(link.url!)) {
+        launchUrl(link.url!);
+      }
+    } else if (link.dest != null) {
+      controller.goToDest(link.dest);
+    }
+  },
 ),
 ```
 
-For URIs, you should check the validity of the URIs before opening the URI; the example code just show dialog to ask whether to open the URL or not.
+#### Note for Link Validation
+
+For URIs, you should check the validity of the URIs before opening the URI; [the example code](https://github.com/espresso3389/pdfrx/blob/7462532645311754a048c62e62a4a32bf9eae32a/example/viewer/lib/main.dart#L410) just show dialog to ask whether to open the URL or not.
 
 For destinations, you can use [PdfViewerController.goToDest](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerController/goToDest.html) to go to the destination. Or you can use [PdfViewerController.calcMatrixForDest](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerController/calcMatrixForDest.html) to get the matrix for it.
+
+#### Link Appearance
+
+For link appearance, you can change its color using [PdfLinkHandlerParams.linkColor](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfLinkHandlerParams/linkColor.html).
+
+For more further customization, you can use [PdfLinkHandlerParams.customPainter](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfLinkHandlerParams/customPainter.html):
+
+```dart
+customPainter: (canvas, pageRect, page, links) {
+  final paint = Paint()
+    ..color = Colors.red.withOpacity(0.2)
+    ..style = PaintingStyle.fill;
+  for (final link in links) {
+    // you can customize here to make your own link appearance
+    final rect = link.rect.toRectInPageRect(page: page, pageRect: pageRect);
+    canvas.drawRect(rect, paint);
+  }
+}
+```
 
 ### Document Outline (a.k.a Bookmarks)
 
@@ -361,7 +328,7 @@ By default, the viewer does never show any scroll bars nor scroll thumbs.
 You can add scroll thumbs by using [PdfViewerParams.viewerOverlayBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerParams/viewerOverlayBuilder.html):
 
 ```dart
-viewerOverlayBuilder: (context, size) => [
+viewerOverlayBuilder: (context, size, handleLinkTap) => [
   // Add vertical scroll thumb on viewer's right side
   PdfViewerScrollThumb(
     controller: controller,
@@ -398,16 +365,46 @@ Basically, [PdfViewerParams.viewerOverlayBuilder](https://pub.dev/documentation/
 
 But if you want to place many visual objects that does not interact with user, you'd better use [PdfViewerParams.pagePaintCallback](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerParams/pagePaintCallbacks.html).
 
-### Adding Page Number on Page Bottom
+### Double-tap to Zoom
 
-If you want to add page number on each page, you can do that by [PdfViewerParams.pageOverlayBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerParams/pageOverlayBuilder.html):
+You can implement double-tap-to-zoom feature using [PdfViewerParams.viewerOverlayBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerParams/viewerOverlayBuilder.html) with [PdfViewerScrollThumb](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerScrollThumb-class.html):
 
 ```dart
-pageOverlayBuilder: (context, pageRect, page) {
+viewerOverlayBuilder: (context, size, handleLinkTap) => [
+  GestureDetector(
+    behavior: HitTestBehavior.translucent,
+    // Your code here:
+    onDoubleTap: () {
+      controller.zoomUp(loop: true);
+    },
+    // If you use GestureDetector on viewerOverlayBuilder, it breaks link-tap handling
+    // and you should manually handle it using onTapUp callback
+    onTapUp: (details) {
+      handleLinkTap(details.localPosition);
+    },
+    // Make the GestureDetector covers all the viewer widget's area
+    // but also make the event go through to the viewer.
+    child: IgnorePointer(
+      child:
+          SizedBox(width: size.width, height: size.height),
+    ),
+  ),
+  ...
+],
+```
+
+If you want to use [PdfViewerScrollThumb](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerScrollThumb-class.html) with double-tap-to-zoom enabled, place the double-tap-to-zoom code before [PdfViewerScrollThumb](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerScrollThumb-class.html).
+
+### Adding Page Number on Page Bottom
+
+If you want to add page number on each page, you can do that by [PdfViewerParams.pageOverlaysBuilder](https://pub.dev/documentation/pdfrx/latest/pdfrx/PdfViewerParams/pageOverlaysBuilder.html):
+
+```dart
+pageOverlaysBuilder: (context, pageRect, page) {
   return Align(
     alignment: Alignment.bottomCenter,
     child: Text(page.pageNumber.toString(),
-    style: const TextStyle(color: Colors.red)));
+    style: const TextStyle(color: Colors.red)));33
 },
 ```
 

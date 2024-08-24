@@ -26,13 +26,13 @@ String _getModuleFileName() {
   throw UnsupportedError('Unsupported platform');
 }
 
-/// Loaded pdfium module.
+/// Loaded PDFium module.
 final pdfium =
     pdfium_bindings.pdfium(DynamicLibrary.open(_getModuleFileName()));
 
 bool _initialized = false;
 
-/// Initializes pdfium library.
+/// Initializes PDFium library.
 void _init() {
   if (_initialized) return;
   using(
@@ -228,6 +228,7 @@ class PdfDocumentFactoryImpl extends PdfDocumentFactory {
     PdfDownloadReportCallback? reportCallback,
     bool preferRangeAccess = false,
     Map<String, String>? headers,
+    bool withCredentials = false,
   }) =>
       pdfDocumentFromUri(
         uri,
@@ -664,10 +665,14 @@ class PdfPagePdfium extends PdfPage {
   Future<PdfPageText> loadText() => PdfPageTextPdfium._loadText(this);
 
   @override
-  Future<List<PdfLink>> loadLinks() async {
-    final annots = await _loadAnnotLinks();
-    final links = await _loadLinks();
-    return annots + links;
+  Future<List<PdfLink>> loadLinks({bool compact = false}) async {
+    final links = await _loadAnnotLinks() + await _loadLinks();
+    if (compact) {
+      for (int i = 0; i < links.length; i++) {
+        links[i] = links[i].compact();
+      }
+    }
+    return List.unmodifiable(links);
   }
 
   Future<List<PdfLink>> _loadLinks() async => document.isDisposed

@@ -103,7 +103,7 @@ class _MainPageState extends State<MainPage> {
           ),
           IconButton(
             icon: const Icon(Icons.last_page),
-            onPressed: () => controller.goToPage(pageNumber: controller.pages.length),
+            onPressed: () => controller.goToPage(pageNumber: controller.pageCount),
           ),
         ],
       ),
@@ -186,7 +186,7 @@ class _MainPageState extends State<MainPage> {
                   //   r"D:\pdfrx\example\assets\hello.pdf",
                   // PdfViewer.uri(
                   //   Uri.parse(
-                  //       'https://espresso3389.github.io/pdfrx/assets/assets/PDF32000_2008.pdf'),
+                  //       'https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf'),
                   // PdfViewer.uri(
                   //   Uri.parse(kIsWeb
                   //       ? 'assets/assets/hello.pdf'
@@ -243,20 +243,44 @@ class _MainPageState extends State<MainPage> {
                     //   );
                     // },
                     //
+                    onViewSizeChanged: (viewSize, oldViewSize, controller) {
+                      if (oldViewSize != null) {
+                        //
+                        // Calculate the matrix to keep the center position during device
+                        // screen rotation
+                        //
+                        // The most important thing here is that the transformation matrix
+                        // is not changed on the view change.
+                        final centerPosition = controller.value.calcPosition(oldViewSize);
+                        final newMatrix = controller.calcMatrixFor(centerPosition);
+                        // Don't change the matrix in sync; the callback might be called
+                        // during widget-tree's build process.
+                        Future.delayed(
+                          const Duration(milliseconds: 200),
+                          () => controller.goTo(newMatrix),
+                        );
+                      }
+                    },
                     // Scroll-thumbs example
                     //
-                    viewerOverlayBuilder: (context, size) => [
+                    viewerOverlayBuilder: (context, size, handleLinkTap) => [
                       //
                       // Double-tap to zoom
                       //
                       GestureDetector(
                         behavior: HitTestBehavior.translucent,
+                        // If you use GestureDetector on viewerOverlayBuilder, it breaks link-tap handling
+                        // and you should manually handle it using onTapUp callback
+                        onTapUp: (details) {
+                          handleLinkTap(details.localPosition);
+                        },
                         onDoubleTap: () {
                           controller.zoomUp(loop: true);
                         },
+                        // Make the GestureDetector covers all the viewer widget's area
+                        // but also make the event go through to the viewer.
                         child: IgnorePointer(
-                          child:
-                              SizedBox(width: size.width, height: size.height),
+                          child: SizedBox(width: size.width, height: size.height),
                         ),
                       ),
                       //
@@ -299,27 +323,14 @@ class _MainPageState extends State<MainPage> {
                     //
                     // Link handling example
                     //
-                    // GestureDetector/IgnorePointer propagate panning/zooming gestures to the viewer
-                    linkWidgetBuilder: (context, link, size) => MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      hitTestBehavior: HitTestBehavior.translucent,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onTap: () async {
-                          if (link.url != null) {
-                            navigateToUrl(link.url!);
-                          } else if (link.dest != null) {
-                            controller.goToDest(link.dest);
-                          }
-                        },
-                        child: IgnorePointer(
-                          child: Container(
-                            color: Colors.blue.withOpacity(0.2),
-                            width: size.width,
-                            height: size.height,
-                          ),
-                        ),
-                      ),
+                    linkHandlerParams: PdfLinkHandlerParams(
+                      onLinkTap: (link) {
+                        if (link.url != null) {
+                          navigateToUrl(link.url!);
+                        } else if (link.dest != null) {
+                          controller.goToDest(link.dest);
+                        }
+                      },
                     ),
                     pagePaintCallbacks: [
                       textSearcher.pageTextMatchPaintCallback,
@@ -377,11 +388,8 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _addCurrentSelectionToMarkers(Color color) {
-    if (controller.isReady &&
-        controller.pageNumber != null &&
-        _selectedText != null &&
-        _selectedText!.isNotEmpty) {
-      _markers.putIfAbsent(controller.pageNumber!, () => []).add(Marker(color, _selectedText!));
+    if (controller.isReady && _selectedText != null && _selectedText!.isNotEmpty) {
+      _markers.putIfAbsent(_selectedText!.pageNumber, () => []).add(Marker(color, _selectedText!));
       setState(() {});
     }
   }

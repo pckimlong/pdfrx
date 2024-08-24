@@ -29,7 +29,7 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../src" "${CMAKE_CURRENT_BINARY_DI
 # versions of CMake.
 cmake_policy(VERSION 3.14...3.25)
 
-set(PDFIUM_RELEASE chromium%2F6517)
+set(PDFIUM_RELEASE chromium%2F6555)
 set(PDFIUM_DIR ${CMAKE_BINARY_DIR}/pdfium)
 set(PDFIUM_RELEASE_DIR ${PDFIUM_DIR}/${PDFIUM_RELEASE})
 
@@ -53,18 +53,19 @@ set(PDFIUM_LATEST_LIBS_ARCH_DIR ${PDFIUM_LATEST_DIR}/${PDFIUM_LINUX_ABI})
 set(PDFIUM_LATEST_LIB_FILENAME ${PDFIUM_LATEST_LIBS_ARCH_DIR}/${PDFIUM_LIB_FILENAME})
 
 if(NOT EXISTS ${PDFIUM_SRC_LIB_FILENAME})
-    message(STATUS "Download precompiled pdfium...")
+    message(STATUS "Download precompiled PDFium...")
     file(DOWNLOAD https://github.com/bblanchon/pdfium-binaries/releases/download/${PDFIUM_RELEASE}/${PDFIUM_ARCHIVE_NAME}.tgz ${PDFIUM_RELEASE_DIR}/${PDFIUM_ARCHIVE_NAME}.tgz)
     execute_process(
         COMMAND ${CMAKE_COMMAND} -E tar zxf ${PDFIUM_RELEASE_DIR}/${PDFIUM_ARCHIVE_NAME}.tgz
         WORKING_DIRECTORY ${PDFIUM_RELEASE_DIR}
+        RESULT_VARIABLE STATUS
         ERROR_QUIET
     )
     if(STATUS AND NOT STATUS EQUAL 0)
-        message(FATAL_ERROR "Could not obtain pdfium binary for ${PDFIUM_LINUX_ABI}")
+        message(FATAL_ERROR "Could not obtain PDFium binary for ${PDFIUM_LINUX_ABI}: ${STATUS}")
     endif()
 else()
-    message(STATUS "Use existing precompiled pdfium." )
+    message(STATUS "Use existing precompiled PDFium." )
 endif()
 
 if (NOT EXISTS ${PDFIUM_DEST_LIB_FILENAME})
