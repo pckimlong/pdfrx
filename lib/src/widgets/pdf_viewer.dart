@@ -13,7 +13,6 @@ import 'package:synchronized/extension.dart';
 import 'package:vector_math/vector_math_64.dart' as vec;
 
 import '../../pdfrx.dart';
-import 'interactive_viewer.dart' as iv;
 import 'pdf_error_widget.dart';
 import 'pdf_page_links_overlay.dart';
 import 'pdf_page_text_overlay.dart';
@@ -403,7 +402,7 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
                 _calcZoomStopTable();
                 return Stack(
                   children: [
-                    iv.InteractiveViewer(
+                    InteractiveViewer(
                       transformationController: _txController,
                       constrained: false,
                       boundaryMargin:
@@ -418,7 +417,6 @@ class _PdfViewerState extends State<PdfViewer> with SingleTickerProviderStateMix
                       onInteractionUpdate: widget.params.onInteractionUpdate,
                       interactionEndFrictionCoefficient:
                           widget.params.interactionEndFrictionCoefficient,
-                      onWheelDelta: widget.params.scrollByMouseWheel != null ? _onWheelDelta : null,
                       // PDF pages
                       child: CustomPaint(
                         foregroundPainter: _CustomPainter.fromFunction(_customPaint),
